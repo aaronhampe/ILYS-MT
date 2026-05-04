@@ -1,0 +1,13 @@
+{
+  "id": "clean_di",
+  "name": "Clean DI Monitor",
+  "category": "guitar",
+  "description": "Low-latency clean guitar monitoring with gentle high-pass filtering.",
+  "input_channel": 0,
+  "input_gain_db": 3.0,
+  "output_gain_db": -6.0,
+  "high_pass_hz": 80.0,
+  "gate_threshold_db": -70.0,
+  "drive": 1.0
+}
+
