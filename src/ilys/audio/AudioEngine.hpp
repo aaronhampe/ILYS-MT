@@ -2,8 +2,8 @@
 
 #include "ilys/audio/AudioDevice.hpp"
 #include "ilys/core/Result.hpp"
-#include "ilys/dsp/GuitarMonitorProcessor.hpp"
-#include "ilys/presets/GuitarPreset.hpp"
+#include "ilys/dsp/InstrumentMonitorProcessor.hpp"
+#include "ilys/presets/InstrumentPreset.hpp"
 
 #include <memory>
 #include <optional>
@@ -33,10 +33,13 @@ public:
     [[nodiscard]] std::vector<AudioDevice> listOutputDevices() const;
     [[nodiscard]] const AudioSettings& settings() const noexcept;
     [[nodiscard]] bool isRunning() const noexcept;
+    [[nodiscard]] bool requiresAudioInput() const noexcept;
 
     core::Result setInputDevice(unsigned int index);
     core::Result setOutputDevice(unsigned int index);
-    core::Result applyPreset(const presets::GuitarPreset& preset);
+    core::Result applyPreset(const presets::InstrumentPreset& preset);
+    void noteOn(unsigned int note, float velocity) noexcept;
+    void noteOff(unsigned int note) noexcept;
     core::Result start();
     void stop();
 
@@ -47,4 +50,3 @@ private:
 };
 
 } // namespace ilys::audio
-

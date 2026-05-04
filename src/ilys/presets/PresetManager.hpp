@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ilys/presets/GuitarPreset.hpp"
+#include "ilys/presets/InstrumentPreset.hpp"
 
 #include <filesystem>
 #include <string>
@@ -14,12 +14,11 @@ public:
 
     [[nodiscard]] const std::filesystem::path& root() const noexcept;
     [[nodiscard]] std::vector<std::string> listCategories() const;
-    [[nodiscard]] std::vector<GuitarPreset> listGuitarPresets() const;
-    [[nodiscard]] GuitarPreset loadGuitarPreset(const std::string& id) const;
+    [[nodiscard]] std::vector<InstrumentPreset> listPresets(const std::string& category) const;
+    [[nodiscard]] InstrumentPreset loadPreset(const std::string& category, const std::string& id) const;
 
 private:
     std::filesystem::path root_;
 };
 
 } // namespace ilys::presets
-

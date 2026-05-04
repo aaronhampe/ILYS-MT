@@ -1,0 +1,17 @@
+{
+  "id": "blues_edge",
+  "name": "Blues Edge",
+  "category": "guitar",
+  "source": "audio",
+  "description": "Light breakup for blues lines and dynamic picking.",
+  "input_channel": 0,
+  "input_gain_db": 8.0,
+  "output_gain_db": -9.0,
+  "high_pass_hz": 95.0,
+  "low_pass_hz": 8500.0,
+  "gate_threshold_db": -64.0,
+  "drive": 2.2,
+  "tone": 0.64,
+  "tremolo_depth": 0.08,
+  "tremolo_rate_hz": 4.2
+}

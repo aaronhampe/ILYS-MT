@@ -1,0 +1,17 @@
+{
+  "id": "jazz_warm",
+  "name": "Jazz Warm",
+  "category": "guitar",
+  "source": "audio",
+  "description": "Darker clean preset for neck pickup lines and comping.",
+  "input_channel": 0,
+  "input_gain_db": 3.0,
+  "output_gain_db": -7.5,
+  "high_pass_hz": 75.0,
+  "low_pass_hz": 5800.0,
+  "gate_threshold_db": -76.0,
+  "drive": 1.0,
+  "tone": 0.36,
+  "tremolo_depth": 0.0,
+  "tremolo_rate_hz": 5.0
+}

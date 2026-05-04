@@ -155,6 +155,11 @@ bool AudioEngine::Impl::isRunning() const noexcept
     return running_.load(std::memory_order_relaxed);
 }
 
+bool AudioEngine::Impl::requiresAudioInput() const noexcept
+{
+    return processor_.requiresAudioInput();
+}
+
 core::Result AudioEngine::Impl::setInputDevice(unsigned int index)
 {
     if (isRunning()) {
@@ -187,10 +192,20 @@ core::Result AudioEngine::Impl::setOutputDevice(unsigned int index)
     return core::Result::success("Output device set to " + devices[index].publicInfo.name);
 }
 
-core::Result AudioEngine::Impl::applyPreset(const presets::GuitarPreset& preset)
+core::Result AudioEngine::Impl::applyPreset(const presets::InstrumentPreset& preset)
 {
     processor_.applyPreset(preset);
     return core::Result::success("Loaded preset: " + preset.name);
+}
+
+void AudioEngine::Impl::noteOn(unsigned int note, float velocity) noexcept
+{
+    processor_.noteOn(note, velocity);
+}
+
+void AudioEngine::Impl::noteOff(unsigned int note) noexcept
+{
+    processor_.noteOff(note);
 }
 
 core::Result AudioEngine::Impl::start()
@@ -199,9 +214,10 @@ core::Result AudioEngine::Impl::start()
         return core::Result::success("Monitoring is already running.");
     }
 
-    const auto inputs = captureDevices();
     const auto outputs = playbackDevices();
-    if (inputs.empty()) {
+    const auto needsAudioInput = requiresAudioInput();
+    const auto inputs = needsAudioInput ? captureDevices() : std::vector<NativeDevice>{};
+    if (needsAudioInput && inputs.empty()) {
         return core::Result::failure("No audio input devices found.");
     }
 
@@ -209,23 +225,27 @@ core::Result AudioEngine::Impl::start()
         return core::Result::failure("No audio output devices found.");
     }
 
-    const auto inputIndex = settings_.inputDeviceIndex.value_or(0);
     const auto outputIndex = settings_.outputDeviceIndex.value_or(0);
-    if (inputIndex >= inputs.size() || outputIndex >= outputs.size()) {
+    const auto inputIndex = settings_.inputDeviceIndex.value_or(0);
+    if ((needsAudioInput && inputIndex >= inputs.size()) || outputIndex >= outputs.size()) {
         return core::Result::failure("Selected audio device is no longer available.");
     }
 
-    settings_.inputDeviceIndex = inputIndex;
+    if (needsAudioInput) {
+        settings_.inputDeviceIndex = inputIndex;
+        settings_.inputChannels = 1;
+    }
     settings_.outputDeviceIndex = outputIndex;
-    settings_.inputChannels = 1;
     settings_.outputChannels = preferredOutputChannels(outputs[outputIndex].publicInfo.channelCount);
 
     processor_.prepare(static_cast<float>(settings_.sampleRate), settings_.outputChannels);
 
-    auto config = ma_device_config_init(ma_device_type_duplex);
-    config.capture.pDeviceID = &inputs[inputIndex].nativeId;
-    config.capture.format = ma_format_f32;
-    config.capture.channels = settings_.inputChannels;
+    auto config = ma_device_config_init(needsAudioInput ? ma_device_type_duplex : ma_device_type_playback);
+    if (needsAudioInput) {
+        config.capture.pDeviceID = &inputs[inputIndex].nativeId;
+        config.capture.format = ma_format_f32;
+        config.capture.channels = settings_.inputChannels;
+    }
     config.playback.pDeviceID = &outputs[outputIndex].nativeId;
     config.playback.format = ma_format_f32;
     config.playback.channels = settings_.outputChannels;

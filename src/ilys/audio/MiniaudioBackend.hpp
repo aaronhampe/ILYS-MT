@@ -3,7 +3,7 @@
 #include "ilys/audio/AudioDevice.hpp"
 #include "ilys/audio/AudioEngine.hpp"
 #include "ilys/core/Result.hpp"
-#include "ilys/dsp/GuitarMonitorProcessor.hpp"
+#include "ilys/dsp/InstrumentMonitorProcessor.hpp"
 
 #include <miniaudio.h>
 
@@ -21,10 +21,13 @@ public:
     [[nodiscard]] std::vector<AudioDevice> listOutputDevices() const;
     [[nodiscard]] const AudioSettings& settings() const noexcept;
     [[nodiscard]] bool isRunning() const noexcept;
+    [[nodiscard]] bool requiresAudioInput() const noexcept;
 
     core::Result setInputDevice(unsigned int index);
     core::Result setOutputDevice(unsigned int index);
-    core::Result applyPreset(const presets::GuitarPreset& preset);
+    core::Result applyPreset(const presets::InstrumentPreset& preset);
+    void noteOn(unsigned int note, float velocity) noexcept;
+    void noteOff(unsigned int note) noexcept;
     core::Result start();
     void stop();
 
@@ -49,8 +52,7 @@ private:
     std::atomic<bool> running_{false};
 
     AudioSettings settings_{};
-    dsp::GuitarMonitorProcessor processor_{};
+    dsp::InstrumentMonitorProcessor processor_{};
 };
 
 } // namespace ilys::audio
-

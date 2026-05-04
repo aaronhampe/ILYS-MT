@@ -1,0 +1,17 @@
+{
+  "id": "high_gain_lead",
+  "name": "High Gain Lead",
+  "category": "guitar",
+  "source": "audio",
+  "description": "Saturated lead preset with stronger gating and speaker-like rolloff.",
+  "input_channel": 0,
+  "input_gain_db": 18.0,
+  "output_gain_db": -6.0,
+  "high_pass_hz": 110.0,
+  "low_pass_hz": 5200.0,
+  "gate_threshold_db": -50.0,
+  "drive": 9.0,
+  "tone": 0.48,
+  "tremolo_depth": 0.0,
+  "tremolo_rate_hz": 5.0
+}

@@ -11,6 +11,7 @@ include(FetchContent)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
     nlohmann_json
@@ -24,26 +25,37 @@ FetchContent_Declare(
     GIT_TAG 0.11.25
 )
 
+FetchContent_Declare(
+    rtmidi
+    GIT_REPOSITORY https://github.com/thestk/rtmidi.git
+    GIT_TAG 6.0.0
+)
+
 set(MINIAUDIO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(MINIAUDIO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(MINIAUDIO_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(MINIAUDIO_NO_EXTRA_NODES ON CACHE BOOL "" FORCE)
 set(MINIAUDIO_INSTALL OFF CACHE BOOL "" FORCE)
 
+set(RTMIDI_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(RTMIDI_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+
 FetchContent_MakeAvailable(nlohmann_json)
 FetchContent_MakeAvailable(miniaudio_source)
+FetchContent_MakeAvailable(rtmidi)
 
 add_executable(ilys-mt
     src/main.cpp
     src/ilys/audio/AudioEngine.cpp
     src/ilys/audio/MiniaudioBackend.cpp
     src/ilys/cli/TerminalApp.cpp
-    src/ilys/dsp/GuitarMonitorProcessor.cpp
+    src/ilys/dsp/InstrumentMonitorProcessor.cpp
+    src/ilys/midi/RtMidiBackend.cpp
     src/ilys/presets/PresetManager.cpp
 )
 
 target_include_directories(ilys-mt PRIVATE src)
-target_link_libraries(ilys-mt PRIVATE miniaudio nlohmann_json::nlohmann_json)
+target_link_libraries(ilys-mt PRIVATE miniaudio rtmidi nlohmann_json::nlohmann_json)
 
 if(APPLE)
     target_link_libraries(ilys-mt PRIVATE

@@ -1,0 +1,17 @@
+{
+  "id": "metal_rhythm",
+  "name": "Metal Rhythm",
+  "category": "guitar",
+  "source": "audio",
+  "description": "Tight distorted rhythm preset with aggressive gate and low-pass filtering.",
+  "input_channel": 0,
+  "input_gain_db": 20.0,
+  "output_gain_db": -18.0,
+  "high_pass_hz": 130.0,
+  "low_pass_hz": 4800.0,
+  "gate_threshold_db": -46.0,
+  "drive": 7.5,
+  "tone": 0.42,
+  "tremolo_depth": 0.0,
+  "tremolo_rate_hz": 5.0
+}

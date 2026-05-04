@@ -1,0 +1,17 @@
+{
+  "id": "classic_crunch",
+  "name": "Classic Crunch",
+  "category": "guitar",
+  "source": "audio",
+  "description": "Mid-gain rock rhythm tone with rounded top end.",
+  "input_channel": 0,
+  "input_gain_db": 12.0,
+  "output_gain_db": -12.0,
+  "high_pass_hz": 100.0,
+  "low_pass_hz": 6500.0,
+  "gate_threshold_db": -58.0,
+  "drive": 3.6,
+  "tone": 0.58,
+  "tremolo_depth": 0.0,
+  "tremolo_rate_hz": 5.0
+}

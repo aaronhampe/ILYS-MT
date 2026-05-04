@@ -7,18 +7,21 @@ ILYS-MT starts as a terminal-first audio workstation, but the code is split alon
 - `cli`: terminal shell, commands, and user-facing text
 - `audio`: device discovery, audio stream lifetime, backend integration
 - `dsp`: real-time audio processing
-- `presets`: loading JSON presets from category folders
+- `presets`: loading JSON presets from instrument category folders
 - `core`: shared small types that do not depend on audio or UI
 
 ## Audio Model
 
-The first engine mode is live monitoring:
+The first engine mode is live instrument monitoring:
 
 ```text
-audio input -> guitar monitor processor -> audio output
+audio input -> instrument monitor processor -> audio output
+MIDI input -> internal instrument voices -> audio output
 ```
 
 The application does not listen to raw USB ports. USB audio interfaces are exposed by the operating system as audio devices, so ILYS-MT discovers them through the cross-platform audio backend.
+
+USB keyboards and synths may expose either audio, MIDI, or both. ILYS-MT now has a MIDI input layer for controllers and a starter internal voice engine for piano and synth presets.
 
 ## Real-Time Rules
 
@@ -39,6 +42,7 @@ Near-term additions should fit into these boundaries:
 - track/session model in a new `src/ilys/session` layer
 - transport and clock in a new `src/ilys/transport` layer
 - plugin/effect graph behind the existing `dsp` boundary
+- richer MIDI event routing in the existing `src/ilys/midi` layer
+- dedicated software instruments in a future `src/ilys/instruments` layer
 - recording and file import/export in a dedicated storage layer
 - GUI later as another frontend beside `cli`, not as a replacement for the engine
-

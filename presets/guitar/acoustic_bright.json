@@ -1,0 +1,17 @@
+{
+  "id": "acoustic_bright",
+  "name": "Acoustic Bright",
+  "category": "guitar",
+  "source": "audio",
+  "description": "Clean acoustic-style monitoring with extra clarity and controlled low end.",
+  "input_channel": 0,
+  "input_gain_db": 4.0,
+  "output_gain_db": -7.0,
+  "high_pass_hz": 120.0,
+  "low_pass_hz": 16000.0,
+  "gate_threshold_db": -72.0,
+  "drive": 1.0,
+  "tone": 0.9,
+  "tremolo_depth": 0.0,
+  "tremolo_rate_hz": 5.0
+}

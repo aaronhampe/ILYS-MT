@@ -1,0 +1,17 @@
+{
+  "id": "punk_drive",
+  "name": "Punk Drive",
+  "category": "guitar",
+  "source": "audio",
+  "description": "Raw driven preset for fast rhythm parts.",
+  "input_channel": 0,
+  "input_gain_db": 15.0,
+  "output_gain_db": -14.0,
+  "high_pass_hz": 115.0,
+  "low_pass_hz": 7200.0,
+  "gate_threshold_db": -55.0,
+  "drive": 4.4,
+  "tone": 0.67,
+  "tremolo_depth": 0.0,
+  "tremolo_rate_hz": 5.0
+}

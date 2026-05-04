@@ -31,6 +31,11 @@ bool AudioEngine::isRunning() const noexcept
     return impl_->isRunning();
 }
 
+bool AudioEngine::requiresAudioInput() const noexcept
+{
+    return impl_->requiresAudioInput();
+}
+
 core::Result AudioEngine::setInputDevice(unsigned int index)
 {
     return impl_->setInputDevice(index);
@@ -41,9 +46,19 @@ core::Result AudioEngine::setOutputDevice(unsigned int index)
     return impl_->setOutputDevice(index);
 }
 
-core::Result AudioEngine::applyPreset(const presets::GuitarPreset& preset)
+core::Result AudioEngine::applyPreset(const presets::InstrumentPreset& preset)
 {
     return impl_->applyPreset(preset);
+}
+
+void AudioEngine::noteOn(unsigned int note, float velocity) noexcept
+{
+    impl_->noteOn(note, velocity);
+}
+
+void AudioEngine::noteOff(unsigned int note) noexcept
+{
+    impl_->noteOff(note);
 }
 
 core::Result AudioEngine::start()
@@ -57,4 +72,3 @@ void AudioEngine::stop()
 }
 
 } // namespace ilys::audio
-

@@ -1,0 +1,17 @@
+{
+  "id": "indie_jangle",
+  "name": "Indie Jangle",
+  "category": "guitar",
+  "source": "audio",
+  "description": "Bright clean-to-edge preset for picked chords and arpeggios.",
+  "input_channel": 0,
+  "input_gain_db": 6.0,
+  "output_gain_db": -8.5,
+  "high_pass_hz": 105.0,
+  "low_pass_hz": 14000.0,
+  "gate_threshold_db": -68.0,
+  "drive": 1.4,
+  "tone": 0.88,
+  "tremolo_depth": 0.16,
+  "tremolo_rate_hz": 5.8
+}

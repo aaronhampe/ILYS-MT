@@ -1,0 +1,17 @@
+{
+  "id": "dream_clean",
+  "name": "Dream Clean",
+  "category": "guitar",
+  "source": "audio",
+  "description": "Soft clean monitoring for ambient chords and layered parts.",
+  "input_channel": 0,
+  "input_gain_db": 2.0,
+  "output_gain_db": -8.0,
+  "high_pass_hz": 85.0,
+  "low_pass_hz": 12500.0,
+  "gate_threshold_db": -74.0,
+  "drive": 1.1,
+  "tone": 0.72,
+  "tremolo_depth": 0.28,
+  "tremolo_rate_hz": 3.4
+}
