@@ -29,6 +29,9 @@ public:
     void noteOn(unsigned int note, float velocity) noexcept;
     void noteOff(unsigned int note) noexcept;
     core::Result start();
+    core::Result beginRecording(double maxSeconds);
+    AudioClip finishRecording();
+    core::Result playClips(std::vector<AudioClip> clips);
     void stop();
 
 private:
@@ -44,6 +47,9 @@ private:
 
     [[nodiscard]] std::vector<NativeDevice> captureDevices() const;
     [[nodiscard]] std::vector<NativeDevice> playbackDevices() const;
+    core::Result startStream(bool needsAudioInput, const std::string& successMessage);
+    void mixPlayback(float* output, unsigned int outputChannels, ma_uint32 frameCount) noexcept;
+    void captureInput(const float* input, unsigned int inputChannels, ma_uint32 frameCount) noexcept;
 
     ma_context context_{};
     ma_device device_{};
@@ -53,6 +59,12 @@ private:
 
     AudioSettings settings_{};
     dsp::InstrumentMonitorProcessor processor_{};
+    std::atomic<bool> recording_{false};
+    std::atomic<bool> playback_{false};
+    std::vector<float> recordingBuffer_;
+    std::vector<AudioClip> playbackClips_;
+    std::size_t playbackPosition_{0};
+    std::size_t maxRecordingSamples_{0};
 };
 
 } // namespace ilys::audio

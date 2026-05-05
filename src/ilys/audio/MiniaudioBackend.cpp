@@ -210,12 +210,16 @@ void AudioEngine::Impl::noteOff(unsigned int note) noexcept
 
 core::Result AudioEngine::Impl::start()
 {
+    return startStream(requiresAudioInput(), "Monitoring started.");
+}
+
+core::Result AudioEngine::Impl::startStream(bool needsAudioInput, const std::string& successMessage)
+{
     if (isRunning()) {
-        return core::Result::success("Monitoring is already running.");
+        return core::Result::success("Audio stream is already running.");
     }
 
     const auto outputs = playbackDevices();
-    const auto needsAudioInput = requiresAudioInput();
     const auto inputs = needsAudioInput ? captureDevices() : std::vector<NativeDevice>{};
     if (needsAudioInput && inputs.empty()) {
         return core::Result::failure("No audio input devices found.");
@@ -268,11 +272,78 @@ core::Result AudioEngine::Impl::start()
     }
 
     running_.store(true, std::memory_order_relaxed);
-    return core::Result::success("Monitoring started.");
+    return core::Result::success(successMessage);
+}
+
+core::Result AudioEngine::Impl::beginRecording(double maxSeconds)
+{
+    if (recording_.load(std::memory_order_relaxed)) {
+        return core::Result::failure("Recording is already active.");
+    }
+
+    if (isRunning() && device_.capture.channels == 0) {
+        stop();
+    }
+
+    const auto streamResult = startStream(true, "Recording stream started.");
+    if (!streamResult.ok && !isRunning()) {
+        return streamResult;
+    }
+
+    maxRecordingSamples_ = static_cast<std::size_t>(
+        std::max(1.0, maxSeconds) * static_cast<double>(settings_.sampleRate)
+    );
+    recordingBuffer_.clear();
+    recordingBuffer_.reserve(maxRecordingSamples_);
+    recording_.store(true, std::memory_order_release);
+    return core::Result::success("Recording started. Press space to stop.");
+}
+
+AudioClip AudioEngine::Impl::finishRecording()
+{
+    recording_.store(false, std::memory_order_release);
+    if (deviceReady_) {
+        ma_device_stop(&device_);
+        ma_device_uninit(&device_);
+        deviceReady_ = false;
+        running_.store(false, std::memory_order_relaxed);
+    }
+
+    AudioClip clip;
+    clip.sampleRate = settings_.sampleRate;
+    clip.samples = std::move(recordingBuffer_);
+    recordingBuffer_.clear();
+    maxRecordingSamples_ = 0;
+    return clip;
+}
+
+core::Result AudioEngine::Impl::playClips(std::vector<AudioClip> clips)
+{
+    if (recording_.load(std::memory_order_relaxed)) {
+        return core::Result::failure("Stop recording before playback.");
+    }
+
+    if (clips.empty()) {
+        return core::Result::failure("No unmuted regions contain recorded audio.");
+    }
+
+    const auto streamResult = startStream(false, "Playback stream started.");
+    if (!streamResult.ok && !isRunning()) {
+        return streamResult;
+    }
+
+    playback_.store(false, std::memory_order_release);
+    playbackClips_ = std::move(clips);
+    playbackPosition_ = 0;
+    playback_.store(true, std::memory_order_release);
+    return core::Result::success("Playback started.");
 }
 
 void AudioEngine::Impl::stop()
 {
+    recording_.store(false, std::memory_order_release);
+    playback_.store(false, std::memory_order_release);
+
     if (deviceReady_) {
         ma_device_stop(&device_);
         ma_device_uninit(&device_);
@@ -280,6 +351,60 @@ void AudioEngine::Impl::stop()
     }
 
     running_.store(false, std::memory_order_relaxed);
+}
+
+void AudioEngine::Impl::mixPlayback(float* output, unsigned int outputChannels, ma_uint32 frameCount) noexcept
+{
+    if (!playback_.load(std::memory_order_acquire) || output == nullptr || outputChannels == 0) {
+        return;
+    }
+
+    bool anyRemaining = false;
+    for (ma_uint32 frame = 0; frame < frameCount; ++frame) {
+        float mixed = 0.0F;
+        bool frameHasAudio = false;
+
+        for (const auto& clip : playbackClips_) {
+            if (playbackPosition_ + frame >= clip.samples.size()) {
+                continue;
+            }
+
+            mixed += clip.samples[playbackPosition_ + frame];
+            frameHasAudio = true;
+        }
+
+        if (frameHasAudio) {
+            anyRemaining = true;
+            mixed = std::clamp(mixed, -1.0F, 1.0F);
+            for (unsigned int channel = 0; channel < outputChannels; ++channel) {
+                output[(frame * outputChannels) + channel] += mixed;
+            }
+        }
+    }
+
+    playbackPosition_ += frameCount;
+    if (!anyRemaining) {
+        playback_.store(false, std::memory_order_release);
+    }
+}
+
+void AudioEngine::Impl::captureInput(const float* input, unsigned int inputChannels, ma_uint32 frameCount) noexcept
+{
+    if (!recording_.load(std::memory_order_acquire) || input == nullptr || inputChannels == 0) {
+        return;
+    }
+
+    const auto remaining = maxRecordingSamples_ > recordingBuffer_.size()
+        ? maxRecordingSamples_ - recordingBuffer_.size()
+        : 0;
+    const auto framesToCapture = std::min<std::size_t>(remaining, frameCount);
+    for (std::size_t frame = 0; frame < framesToCapture; ++frame) {
+        recordingBuffer_.push_back(input[frame * inputChannels]);
+    }
+
+    if (framesToCapture < frameCount) {
+        recording_.store(false, std::memory_order_release);
+    }
 }
 
 void AudioEngine::Impl::dataCallback(ma_device* device,
@@ -292,13 +417,19 @@ void AudioEngine::Impl::dataCallback(ma_device* device,
         return;
     }
 
+    auto* outputSamples = static_cast<float*>(output);
+    const auto* inputSamples = static_cast<const float*>(input);
+
     engine->processor_.process(
-        static_cast<const float*>(input),
+        inputSamples,
         device->capture.channels,
-        static_cast<float*>(output),
+        outputSamples,
         device->playback.channels,
         frameCount
     );
+
+    engine->captureInput(inputSamples, device->capture.channels, frameCount);
+    engine->mixPlayback(outputSamples, device->playback.channels, frameCount);
 }
 
 } // namespace ilys::audio

@@ -2,6 +2,8 @@
 
 #include "ilys/audio/MiniaudioBackend.hpp"
 
+#include <utility>
+
 namespace ilys::audio {
 
 AudioEngine::AudioEngine()
@@ -64,6 +66,21 @@ void AudioEngine::noteOff(unsigned int note) noexcept
 core::Result AudioEngine::start()
 {
     return impl_->start();
+}
+
+core::Result AudioEngine::beginRecording(double maxSeconds)
+{
+    return impl_->beginRecording(maxSeconds);
+}
+
+AudioClip AudioEngine::finishRecording()
+{
+    return impl_->finishRecording();
+}
+
+core::Result AudioEngine::playClips(std::vector<AudioClip> clips)
+{
+    return impl_->playClips(std::move(clips));
 }
 
 void AudioEngine::stop()

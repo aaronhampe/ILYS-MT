@@ -21,6 +21,11 @@ struct AudioSettings {
     unsigned int outputChannels{2};
 };
 
+struct AudioClip {
+    std::vector<float> samples;
+    unsigned int sampleRate{48000};
+};
+
 class AudioEngine {
 public:
     AudioEngine();
@@ -41,6 +46,9 @@ public:
     void noteOn(unsigned int note, float velocity) noexcept;
     void noteOff(unsigned int note) noexcept;
     core::Result start();
+    core::Result beginRecording(double maxSeconds = 300.0);
+    AudioClip finishRecording();
+    core::Result playClips(std::vector<AudioClip> clips);
     void stop();
 
 private:

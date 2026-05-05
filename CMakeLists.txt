@@ -52,6 +52,7 @@ add_executable(ilys-mt
     src/ilys/dsp/InstrumentMonitorProcessor.cpp
     src/ilys/midi/RtMidiBackend.cpp
     src/ilys/presets/PresetManager.cpp
+    src/ilys/project/ProjectManager.cpp
 )
 
 target_include_directories(ilys-mt PRIVATE src)

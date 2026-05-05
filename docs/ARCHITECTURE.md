@@ -5,10 +5,44 @@ ILYS-MT starts as a terminal-first audio workstation, but the code is split alon
 ## Current Layers
 
 - `cli`: terminal shell, commands, and user-facing text
+- `project`: project discovery, creation, and filesystem layout
 - `audio`: device discovery, audio stream lifetime, backend integration
 - `dsp`: real-time audio processing
 - `presets`: loading JSON presets from instrument category folders
 - `core`: shared small types that do not depend on audio or UI
+
+## Command Model
+
+ILYS-MT starts in a workspace command mode. This mode is intentionally limited to help, project management, device setup, audiovisualizer folder creation, and quitting:
+
+```text
+/help
+/create project "name"
+/open project "name"
+/projects
+/audiovisualizer
+/input [index]
+/output [index]
+/midi input [index]
+/devices
+/quit
+```
+
+Creating or opening a project switches the terminal into project mode. Live monitoring, preset loading, status, and future region-editing commands are only available there.
+
+Projects live under `projects/<name>` with starter `audio`, `midi`, `regions`, and `mixes` folders plus `project.json` metadata.
+
+Project mode owns the region workflow:
+
+```text
+/create region "name"
+/select region "name"
+/record
+/play
+/mute region
+```
+
+Recording is currently a mono clip captured from the selected audio input. Region metadata is stored in `regions/regions.json`, recorded clips are stored as float WAV files under `audio/`, and playback mixes every unmuted recorded region from the beginning at the same time.
 
 ## Audio Model
 
