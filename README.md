@@ -63,8 +63,16 @@ Creating a project also opens it. Once the prompt shows the project name, the mu
 
 ```text
 /create region "Verse Guitar"
+/regions
+/bpm 128
+/key "E minor"
+/preset region guitar blues_edge
 /record
 /play
+/loop start
+/loop stop
+/import "/path/to/file.wav"
+/delete recording
 /mute region
 /select region "Verse Guitar"
 presets guitar
@@ -87,7 +95,9 @@ Guitar presets process incoming audio from an audio interface. Piano and synth p
 
 Projects are stored under `projects/<name>` and currently contain starter folders for audio, MIDI, regions, and mixes. The `audiovisualizer` command creates the top-level `audiovisualizer` workspace for the future visualizer module.
 
-Regions are stored in the project metadata. `/record` records the selected region from the audio input until you press space and writes the clip to the project's `audio` folder. `/play` starts all unmuted recorded regions together.
+Regions are stored in the project metadata. `/record` records the selected region from the monitored instrument signal until you press space and writes the clip to the project's `audio` folder. If the selected region already contains audio, ILYS-MT asks for overwrite confirmation. `/play` starts all unmuted recorded regions together. `/loop start` repeats the unmuted regions while keeping live input monitoring active so you can jam over the loop.
+
+Each project stores BPM and key in `project.json`. Each region stores its own preset assignment, mute state, and optional audio file. WAV and MP3 import is handled through the audio backend and copied into the selected region as a project-local WAV.
 
 ## Preset Library
 

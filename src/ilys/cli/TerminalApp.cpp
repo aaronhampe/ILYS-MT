@@ -279,9 +279,17 @@ void TerminalApp::printProjectHelp() const
         << "  /help                         show this help\n"
         << "  /create region \"name\"         create and select a region\n"
         << "  /select region \"name\"         select a region\n"
+        << "  /regions                      show project region view\n"
+        << "  /bpm <value>                  set project BPM\n"
+        << "  /key <name>                   set project key\n"
         << "  /record                       record into the selected region\n"
         << "  /play                         play all unmuted recorded regions\n"
+        << "  /loop start                   loop playback and monitor live input\n"
+        << "  /loop stop                    stop loop playback\n"
+        << "  /import \"path\"                import WAV or MP3 into selected region\n"
+        << "  /delete recording             delete audio from selected region\n"
         << "  /mute region                  mute or unmute the selected region\n"
+        << "  /preset region <cat> <id>     set preset for selected region\n"
         << "  /devices                      list audio and MIDI devices\n"
         << "  /input [index]                list or select audio input device\n"
         << "  /output [index]               list or select audio output device\n"
@@ -403,6 +411,7 @@ void TerminalApp::printRegion(const Region& region) const
     if (&region == selectedRegion()) {
         std::cout << " selected";
     }
+    std::cout << " preset " << region.presetCategory << "/" << region.presetId;
     if (!region.clip.samples.empty()) {
         std::cout << " " << std::fixed << std::setprecision(2) << duration << "s";
     }
@@ -423,11 +432,53 @@ void TerminalApp::printSelectedRegion() const
     printRegion(*region);
 }
 
+void TerminalApp::printProjectUi() const
+{
+    if (!activeProject_) {
+        return;
+    }
+
+    std::cout
+        << '\n'
+        << "ILYS-MT Project: " << activeProject_->name << '\n'
+        << "BPM: " << std::fixed << std::setprecision(1) << projectBpm_
+        << "    Key: " << projectKey_
+        << "    Regions: " << regions_.size()
+        << "    Loop: " << (loopActive_ ? "on" : "off") << '\n'
+        << std::string(78, '=') << '\n';
+
+    if (regions_.empty()) {
+        std::cout << "  no regions. Use /create region \"name\".\n";
+    }
+
+    for (std::size_t index = 0; index < regions_.size(); ++index) {
+        const auto& region = regions_[index];
+        const auto selected = selectedRegionIndex_ && *selectedRegionIndex_ == index;
+        const auto duration = region.clip.sampleRate == 0
+            ? 0.0
+            : static_cast<double>(region.clip.samples.size()) / static_cast<double>(region.clip.sampleRate);
+
+        std::cout
+            << (selected ? "> " : "  ")
+            << '[' << (region.muted ? 'M' : ' ') << "] "
+            << std::left << std::setw(20) << region.name
+            << " "
+            << std::right << std::setw(6) << std::fixed << std::setprecision(2) << duration << "s"
+            << "  " << std::left << std::setw(18) << (region.presetCategory + "/" + region.presetId)
+            << "  " << (region.clip.samples.empty() ? "empty" : region.audioFile)
+            << '\n';
+    }
+
+    std::cout << std::string(78, '=') << '\n';
+}
+
 void TerminalApp::printStatus() const
 {
     const auto& settings = audio_.settings();
     std::cout
         << "project: " << (activeProject_ ? activeProject_->name : "none") << '\n'
+        << "bpm: " << projectBpm_ << '\n'
+        << "key: " << projectKey_ << '\n'
         << "state: " << (audio_.isRunning() ? "monitoring" : "stopped") << '\n'
         << "preset: " << currentPresetCategory_ << "/" << currentPresetId_ << '\n'
         << "source: " << (currentPresetUsesMidi_ ? "midi instrument" : "audio monitor") << '\n'
@@ -473,7 +524,10 @@ void TerminalApp::enterProject(project::ProjectInfo project)
     activeProject_ = std::move(project);
     regions_.clear();
     selectedRegionIndex_.reset();
+    loopActive_ = false;
+    loadProjectSettings();
     loadProjectRegions();
+    saveProjectSettings();
 
     try {
         const auto preset = presets_.loadPreset(currentPresetCategory_, currentPresetId_);
@@ -482,6 +536,52 @@ void TerminalApp::enterProject(project::ProjectInfo project)
     } catch (const std::exception& ex) {
         std::cout << "warning: " << ex.what() << '\n';
     }
+
+    if (selectedRegion() != nullptr) {
+        try {
+            applySelectedRegionPreset();
+        } catch (const std::exception& ex) {
+            std::cout << "warning: " << ex.what() << '\n';
+        }
+    }
+
+    printProjectUi();
+}
+
+void TerminalApp::loadProjectSettings()
+{
+    projectBpm_ = 120.0;
+    projectKey_ = "C";
+    if (!activeProject_) {
+        return;
+    }
+
+    std::ifstream input{activeProject_->path / "project.json"};
+    if (!input) {
+        return;
+    }
+
+    const auto json = nlohmann::json::parse(input);
+    projectBpm_ = json.value("bpm", projectBpm_);
+    projectKey_ = json.value("key", projectKey_);
+}
+
+void TerminalApp::saveProjectSettings() const
+{
+    if (!activeProject_) {
+        return;
+    }
+
+    const nlohmann::json json{
+        {"name", activeProject_->name},
+        {"version", 1},
+        {"type", "ilys-mt-project"},
+        {"bpm", projectBpm_},
+        {"key", projectKey_}
+    };
+
+    std::ofstream output{activeProject_->path / "project.json"};
+    output << json.dump(2) << '\n';
 }
 
 void TerminalApp::loadProjectRegions()
@@ -501,6 +601,8 @@ void TerminalApp::loadProjectRegions()
         Region region;
         region.name = item.value("name", "");
         region.audioFile = item.value("audio_file", "");
+        region.presetCategory = item.value("preset_category", currentPresetCategory_);
+        region.presetId = item.value("preset_id", currentPresetId_);
         region.muted = item.value("muted", false);
         if (region.name.empty()) {
             continue;
@@ -530,6 +632,8 @@ void TerminalApp::saveProjectRegions() const
         json.push_back({
             {"name", region.name},
             {"audio_file", region.audioFile},
+            {"preset_category", region.presetCategory},
+            {"preset_id", region.presetId},
             {"muted", region.muted}
         });
     }
@@ -592,9 +696,13 @@ void TerminalApp::createRegion(const std::string& name)
 
     Region region;
     region.name = name;
+    region.presetCategory = currentPresetCategory_;
+    region.presetId = currentPresetId_;
     regions_.push_back(std::move(region));
     selectedRegionIndex_ = regions_.size() - 1;
     saveProjectRegions();
+    applySelectedRegionPreset();
+    printProjectUi();
     printSelectedRegion();
 }
 
@@ -603,6 +711,8 @@ void TerminalApp::selectRegion(const std::string& name)
     for (std::size_t index = 0; index < regions_.size(); ++index) {
         if (regions_[index].name == name) {
             selectedRegionIndex_ = index;
+            applySelectedRegionPreset();
+            printProjectUi();
             printSelectedRegion();
             return;
         }
@@ -622,6 +732,7 @@ void TerminalApp::muteSelectedRegion()
     region->muted = !region->muted;
     saveProjectRegions();
     std::cout << "ok: Region " << (region->muted ? "muted: " : "unmuted: ") << region->name << '\n';
+    printProjectUi();
     printRegion(*region);
 }
 
@@ -632,6 +743,18 @@ void TerminalApp::recordSelectedRegion()
         std::cout << "error: Create or select a region first.\n";
         return;
     }
+
+    if (!region->clip.samples.empty()) {
+        std::cout << "warning: Region already contains audio. Type 'yes' to overwrite: ";
+        std::string confirmation;
+        std::getline(std::cin, confirmation);
+        if (confirmation != "yes") {
+            std::cout << "ok: Recording cancelled.\n";
+            return;
+        }
+    }
+
+    applySelectedRegionPreset();
 
     const auto result = audio_.beginRecording();
     printResult(result);
@@ -644,10 +767,11 @@ void TerminalApp::recordSelectedRegion()
     saveRegionAudio(*region);
     saveProjectRegions();
     std::cout << "ok: Recorded " << region->clip.samples.size() << " samples into " << region->name << ".\n";
+    printProjectUi();
     printRegion(*region);
 }
 
-void TerminalApp::playRegions()
+void TerminalApp::playRegions(bool loop, bool monitorInput)
 {
     std::vector<audio::AudioClip> clips;
     for (const auto& region : regions_) {
@@ -656,7 +780,139 @@ void TerminalApp::playRegions()
         }
     }
 
-    printResult(audio_.playClips(std::move(clips)));
+    const auto result = audio_.playClips(std::move(clips), loop, monitorInput);
+    loopActive_ = result.ok && loop;
+    printResult(result);
+    if (result.ok) {
+        printProjectUi();
+    }
+}
+
+void TerminalApp::stopLoop()
+{
+    audio_.stopPlayback();
+    loopActive_ = false;
+    std::cout << "ok: Loop playback stopped.\n";
+    printProjectUi();
+}
+
+void TerminalApp::importIntoSelectedRegion(const std::filesystem::path& path)
+{
+    auto* region = selectedRegion();
+    if (region == nullptr) {
+        std::cout << "error: Create or select a region first.\n";
+        return;
+    }
+
+    if (!region->clip.samples.empty()) {
+        std::cout << "warning: Region already contains audio. Type 'yes' to replace it with the import: ";
+        std::string confirmation;
+        std::getline(std::cin, confirmation);
+        if (confirmation != "yes") {
+            std::cout << "ok: Import cancelled.\n";
+            return;
+        }
+    }
+
+    audio::AudioClip clip;
+    const auto result = audio_.loadClipFromFile(path, clip);
+    printResult(result);
+    if (!result.ok) {
+        return;
+    }
+
+    region->clip = std::move(clip);
+    region->audioFile = safeFileStem(region->name) + "-import.wav";
+    saveRegionAudio(*region);
+    saveProjectRegions();
+    printProjectUi();
+    printRegion(*region);
+}
+
+void TerminalApp::deleteSelectedRecording()
+{
+    auto* region = selectedRegion();
+    if (region == nullptr) {
+        std::cout << "error: Create or select a region first.\n";
+        return;
+    }
+
+    if (region->clip.samples.empty()) {
+        std::cout << "ok: Selected region is already empty.\n";
+        return;
+    }
+
+    if (activeProject_ && !region->audioFile.empty()) {
+        std::filesystem::remove(activeProject_->path / "audio" / region->audioFile);
+    }
+    region->clip.samples.clear();
+    region->audioFile.clear();
+    saveProjectRegions();
+    std::cout << "ok: Deleted recording from " << region->name << ".\n";
+    printProjectUi();
+    printRegion(*region);
+}
+
+void TerminalApp::setProjectBpm(const std::string& value)
+{
+    const auto bpm = std::stod(value);
+    if (bpm < 20.0 || bpm > 300.0) {
+        std::cout << "error: BPM must be between 20 and 300.\n";
+        return;
+    }
+
+    projectBpm_ = bpm;
+    saveProjectSettings();
+    printProjectUi();
+}
+
+void TerminalApp::setProjectKey(std::string key)
+{
+    if (key.empty()) {
+        std::cout << "error: Key cannot be empty.\n";
+        return;
+    }
+
+    projectKey_ = std::move(key);
+    saveProjectSettings();
+    printProjectUi();
+}
+
+void TerminalApp::setSelectedRegionPreset(const std::string& category, const std::string& id)
+{
+    auto* region = selectedRegion();
+    if (region == nullptr) {
+        std::cout << "error: Create or select a region first.\n";
+        return;
+    }
+
+    try {
+        const auto preset = presets_.loadPreset(category, id);
+        printResult(audio_.applyPreset(preset));
+        currentPresetCategory_ = preset.category;
+        currentPresetId_ = preset.id;
+        currentPresetUsesMidi_ = preset.source == "midi";
+        region->presetCategory = preset.category;
+        region->presetId = preset.id;
+        saveProjectRegions();
+        printProjectUi();
+    } catch (const std::exception& ex) {
+        std::cout << "error: " << ex.what() << '\n';
+    }
+}
+
+void TerminalApp::applySelectedRegionPreset()
+{
+    const auto* region = selectedRegion();
+    if (region == nullptr) {
+        return;
+    }
+
+    const auto preset = presets_.loadPreset(region->presetCategory, region->presetId);
+    printResult(audio_.applyPreset(preset));
+    currentPresetCategory_ = preset.category;
+    currentPresetId_ = preset.id;
+    currentPresetUsesMidi_ = preset.source == "midi";
 }
 
 bool TerminalApp::executeStartupCommand(const std::vector<std::string>& tokens)
@@ -718,12 +974,28 @@ bool TerminalApp::executeProjectCommand(const std::vector<std::string>& tokens)
         createRegion(tokens[2]);
     } else if (command == "select" && tokens.size() == 3 && tokens[1] == "region") {
         selectRegion(tokens[2]);
+    } else if (command == "regions" && tokens.size() == 1) {
+        printProjectUi();
+    } else if (command == "bpm" && tokens.size() == 2) {
+        setProjectBpm(tokens[1]);
+    } else if (command == "key" && tokens.size() == 2) {
+        setProjectKey(tokens[1]);
     } else if (command == "record" && tokens.size() == 1) {
         recordSelectedRegion();
     } else if (command == "play" && tokens.size() == 1) {
-        playRegions();
+        playRegions(false, false);
+    } else if (command == "loop" && tokens.size() == 2 && tokens[1] == "start") {
+        playRegions(true, true);
+    } else if (command == "loop" && tokens.size() == 2 && tokens[1] == "stop") {
+        stopLoop();
+    } else if (command == "import" && tokens.size() == 2) {
+        importIntoSelectedRegion(tokens[1]);
+    } else if (command == "delete" && tokens.size() == 2 && tokens[1] == "recording") {
+        deleteSelectedRecording();
     } else if (command == "mute" && tokens.size() == 2 && tokens[1] == "region") {
         muteSelectedRegion();
+    } else if (command == "preset" && tokens.size() == 4 && tokens[1] == "region") {
+        setSelectedRegionPreset(tokens[2], tokens[3]);
     } else if (command == "devices") {
         printDevices();
         printMidiDevices();
@@ -749,7 +1021,14 @@ bool TerminalApp::executeProjectCommand(const std::vector<std::string>& tokens)
         currentPresetCategory_ = preset.category;
         currentPresetId_ = preset.id;
         currentPresetUsesMidi_ = preset.source == "midi";
+        if (auto* region = selectedRegion()) {
+            region->presetCategory = preset.category;
+            region->presetId = preset.id;
+            saveProjectRegions();
+            printProjectUi();
+        }
     } else if (command == "start") {
+        applySelectedRegionPreset();
         const auto audioResult = audio_.start();
         printResult(audioResult);
         if (audioResult.ok && currentPresetUsesMidi_) {
@@ -762,6 +1041,7 @@ bool TerminalApp::executeProjectCommand(const std::vector<std::string>& tokens)
     } else if (command == "stop") {
         midi_.stop();
         audio_.stop();
+        loopActive_ = false;
         std::cout << "ok: monitoring stopped.\n";
     } else if (command == "status") {
         printStatus();

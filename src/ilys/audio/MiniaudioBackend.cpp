@@ -317,7 +317,7 @@ AudioClip AudioEngine::Impl::finishRecording()
     return clip;
 }
 
-core::Result AudioEngine::Impl::playClips(std::vector<AudioClip> clips)
+core::Result AudioEngine::Impl::playClips(std::vector<AudioClip> clips, bool loop, bool monitorInput)
 {
     if (recording_.load(std::memory_order_relaxed)) {
         return core::Result::failure("Stop recording before playback.");
@@ -327,7 +327,7 @@ core::Result AudioEngine::Impl::playClips(std::vector<AudioClip> clips)
         return core::Result::failure("No unmuted regions contain recorded audio.");
     }
 
-    const auto streamResult = startStream(false, "Playback stream started.");
+    const auto streamResult = startStream(monitorInput, "Playback stream started.");
     if (!streamResult.ok && !isRunning()) {
         return streamResult;
     }
@@ -335,14 +335,57 @@ core::Result AudioEngine::Impl::playClips(std::vector<AudioClip> clips)
     playback_.store(false, std::memory_order_release);
     playbackClips_ = std::move(clips);
     playbackPosition_ = 0;
+    playbackLength_ = 0;
+    for (const auto& clip : playbackClips_) {
+        playbackLength_ = std::max(playbackLength_, clip.samples.size());
+    }
+    loopPlayback_.store(loop, std::memory_order_release);
     playback_.store(true, std::memory_order_release);
-    return core::Result::success("Playback started.");
+    return core::Result::success(loop ? "Loop playback started." : "Playback started.");
+}
+
+core::Result AudioEngine::Impl::loadClipFromFile(const std::filesystem::path& path, AudioClip& clip)
+{
+    ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 1, settings_.sampleRate);
+    ma_decoder decoder{};
+    const auto initResult = ma_decoder_init_file(path.string().c_str(), &config, &decoder);
+    if (initResult != MA_SUCCESS) {
+        return core::Result::failure("Could not import audio file.");
+    }
+
+    ma_uint64 frameCount = 0;
+    const auto lengthResult = ma_decoder_get_length_in_pcm_frames(&decoder, &frameCount);
+    if (lengthResult != MA_SUCCESS || frameCount == 0) {
+        ma_decoder_uninit(&decoder);
+        return core::Result::failure("Audio file is empty or unsupported.");
+    }
+
+    clip.sampleRate = settings_.sampleRate;
+    clip.samples.assign(static_cast<std::size_t>(frameCount), 0.0F);
+
+    ma_uint64 framesRead = 0;
+    const auto readResult = ma_decoder_read_pcm_frames(&decoder, clip.samples.data(), frameCount, &framesRead);
+    ma_decoder_uninit(&decoder);
+    if (readResult != MA_SUCCESS) {
+        clip.samples.clear();
+        return core::Result::failure("Could not decode audio file.");
+    }
+
+    clip.samples.resize(static_cast<std::size_t>(framesRead));
+    return core::Result::success("Imported audio file.");
+}
+
+void AudioEngine::Impl::stopPlayback() noexcept
+{
+    playback_.store(false, std::memory_order_release);
+    loopPlayback_.store(false, std::memory_order_release);
 }
 
 void AudioEngine::Impl::stop()
 {
     recording_.store(false, std::memory_order_release);
     playback_.store(false, std::memory_order_release);
+    loopPlayback_.store(false, std::memory_order_release);
 
     if (deviceReady_) {
         ma_device_stop(&device_);
@@ -359,17 +402,25 @@ void AudioEngine::Impl::mixPlayback(float* output, unsigned int outputChannels, 
         return;
     }
 
+    if (playbackLength_ == 0) {
+        playback_.store(false, std::memory_order_release);
+        return;
+    }
+
     bool anyRemaining = false;
+    const auto loop = loopPlayback_.load(std::memory_order_acquire);
     for (ma_uint32 frame = 0; frame < frameCount; ++frame) {
+        const auto absolutePosition = playbackPosition_ + frame;
+        const auto position = loop ? absolutePosition % playbackLength_ : absolutePosition;
         float mixed = 0.0F;
         bool frameHasAudio = false;
 
         for (const auto& clip : playbackClips_) {
-            if (playbackPosition_ + frame >= clip.samples.size()) {
+            if (position >= clip.samples.size()) {
                 continue;
             }
 
-            mixed += clip.samples[playbackPosition_ + frame];
+            mixed += clip.samples[position];
             frameHasAudio = true;
         }
 
@@ -383,7 +434,7 @@ void AudioEngine::Impl::mixPlayback(float* output, unsigned int outputChannels, 
     }
 
     playbackPosition_ += frameCount;
-    if (!anyRemaining) {
+    if (!loop && !anyRemaining) {
         playback_.store(false, std::memory_order_release);
     }
 }
@@ -428,7 +479,7 @@ void AudioEngine::Impl::dataCallback(ma_device* device,
         frameCount
     );
 
-    engine->captureInput(inputSamples, device->capture.channels, frameCount);
+    engine->captureInput(outputSamples, device->playback.channels, frameCount);
     engine->mixPlayback(outputSamples, device->playback.channels, frameCount);
 }
 

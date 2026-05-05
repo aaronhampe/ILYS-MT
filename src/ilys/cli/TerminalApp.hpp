@@ -23,6 +23,8 @@ private:
         std::string name;
         audio::AudioClip clip;
         std::string audioFile;
+        std::string presetCategory{"guitar"};
+        std::string presetId{"clean_di"};
         bool muted{false};
     };
 
@@ -37,10 +39,13 @@ private:
     void printProjects() const;
     void printRegion(const Region& region) const;
     void printSelectedRegion() const;
+    void printProjectUi() const;
     void printStatus() const;
     void printCategories() const;
     void printPresets(const std::string& category) const;
     void enterProject(project::ProjectInfo project);
+    void loadProjectSettings();
+    void saveProjectSettings() const;
     void loadProjectRegions();
     void saveProjectRegions() const;
     void saveRegionAudio(Region& region) const;
@@ -51,7 +56,14 @@ private:
     void selectRegion(const std::string& name);
     void muteSelectedRegion();
     void recordSelectedRegion();
-    void playRegions();
+    void playRegions(bool loop, bool monitorInput);
+    void stopLoop();
+    void importIntoSelectedRegion(const std::filesystem::path& path);
+    void deleteSelectedRecording();
+    void setProjectBpm(const std::string& value);
+    void setProjectKey(std::string key);
+    void setSelectedRegionPreset(const std::string& category, const std::string& id);
+    void applySelectedRegionPreset();
     bool executeStartupCommand(const std::vector<std::string>& tokens);
     bool executeProjectCommand(const std::vector<std::string>& tokens);
     bool execute(const std::string& line);
@@ -64,6 +76,9 @@ private:
     std::optional<project::ProjectInfo> activeProject_;
     std::vector<Region> regions_;
     std::optional<std::size_t> selectedRegionIndex_;
+    double projectBpm_{120.0};
+    std::string projectKey_{"C"};
+    bool loopActive_{false};
     std::string currentPresetCategory_{"guitar"};
     std::string currentPresetId_{"clean_di"};
     bool currentPresetUsesMidi_{false};

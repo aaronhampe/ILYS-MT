@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <optional>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -48,7 +49,9 @@ public:
     core::Result start();
     core::Result beginRecording(double maxSeconds = 300.0);
     AudioClip finishRecording();
-    core::Result playClips(std::vector<AudioClip> clips);
+    core::Result playClips(std::vector<AudioClip> clips, bool loop = false, bool monitorInput = false);
+    core::Result loadClipFromFile(const std::filesystem::path& path, AudioClip& clip);
+    void stopPlayback() noexcept;
     void stop();
 
 private:

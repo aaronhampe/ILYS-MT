@@ -37,12 +37,22 @@ Project mode owns the region workflow:
 ```text
 /create region "name"
 /select region "name"
+/regions
+/bpm <value>
+/key <name>
 /record
 /play
+/loop start
+/loop stop
+/import "path"
+/delete recording
 /mute region
+/preset region <category> <id>
 ```
 
-Recording is currently a mono clip captured from the selected audio input. Region metadata is stored in `regions/regions.json`, recorded clips are stored as float WAV files under `audio/`, and playback mixes every unmuted recorded region from the beginning at the same time.
+Recording is currently a mono clip captured from the monitored instrument signal. Region metadata is stored in `regions/regions.json`, recorded clips are stored as float WAV files under `audio/`, and playback mixes every unmuted recorded region from the beginning at the same time.
+
+The project command surface now covers the core tracking loop found in most DAWs: transport-style play/record/stop, loop playback, input monitoring, tempo and key metadata, region import/clear, overwrite protection, per-region mute, and per-region instrument preset assignment. More advanced DAW features such as punch in/out, comping/takes, automation, markers, metronome, editing tools, and time-stretching should wait for a real transport and timeline model.
 
 ## Audio Model
 

@@ -78,9 +78,19 @@ AudioClip AudioEngine::finishRecording()
     return impl_->finishRecording();
 }
 
-core::Result AudioEngine::playClips(std::vector<AudioClip> clips)
+core::Result AudioEngine::playClips(std::vector<AudioClip> clips, bool loop, bool monitorInput)
 {
-    return impl_->playClips(std::move(clips));
+    return impl_->playClips(std::move(clips), loop, monitorInput);
+}
+
+core::Result AudioEngine::loadClipFromFile(const std::filesystem::path& path, AudioClip& clip)
+{
+    return impl_->loadClipFromFile(path, clip);
+}
+
+void AudioEngine::stopPlayback() noexcept
+{
+    impl_->stopPlayback();
 }
 
 void AudioEngine::stop()

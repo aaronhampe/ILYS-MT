@@ -31,7 +31,9 @@ public:
     core::Result start();
     core::Result beginRecording(double maxSeconds);
     AudioClip finishRecording();
-    core::Result playClips(std::vector<AudioClip> clips);
+    core::Result playClips(std::vector<AudioClip> clips, bool loop, bool monitorInput);
+    core::Result loadClipFromFile(const std::filesystem::path& path, AudioClip& clip);
+    void stopPlayback() noexcept;
     void stop();
 
 private:
@@ -61,9 +63,11 @@ private:
     dsp::InstrumentMonitorProcessor processor_{};
     std::atomic<bool> recording_{false};
     std::atomic<bool> playback_{false};
+    std::atomic<bool> loopPlayback_{false};
     std::vector<float> recordingBuffer_;
     std::vector<AudioClip> playbackClips_;
     std::size_t playbackPosition_{0};
+    std::size_t playbackLength_{0};
     std::size_t maxRecordingSamples_{0};
 };
 
