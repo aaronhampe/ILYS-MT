@@ -248,26 +248,114 @@ void setupMidi(SharedState& state, ilys::midi::MidiEngine& midi)
     }
 }
 
-void drawString(ImDrawList* drawList, ImVec2 topLeft, ImVec2 size, float activity, float frequency, double time)
+float fract(float value)
 {
-    const auto centerY = topLeft.y + size.y * 0.5F;
-    const auto left = topLeft.x + 24.0F;
-    const auto right = topLeft.x + size.x - 24.0F;
-    const auto amplitude = 8.0F + activity * 54.0F;
-    const auto cycles = std::clamp(frequency / 90.0F, 2.0F, 12.0F);
+    return value - std::floor(value);
+}
 
-    drawList->AddRectFilled(topLeft, ImVec2{topLeft.x + size.x, topLeft.y + size.y}, IM_COL32(18, 22, 26, 255), 8.0F);
-    drawList->AddLine(ImVec2{left, centerY}, ImVec2{right, centerY}, IM_COL32(80, 90, 100, 255), 2.0F);
+float hash01(float value)
+{
+    return fract(std::sin(value * 12.9898F) * 43758.5453F);
+}
 
-    std::array<ImVec2, 160> points{};
-    for (std::size_t index = 0; index < points.size(); ++index) {
-        const auto t = static_cast<float>(index) / static_cast<float>(points.size() - 1);
-        const auto x = left + (right - left) * t;
-        const auto decay = std::sin(t * 3.14159265F);
-        const auto wave = std::sin((t * cycles * 6.2831853F) + static_cast<float>(time * 9.0));
-        points[index] = ImVec2{x, centerY + wave * amplitude * decay};
+ImU32 noteColor(int midiNote, float offset, float alpha = 1.0F)
+{
+    const auto base = midiNote >= 0 ? static_cast<float>(midiNote % 12) / 12.0F : 0.42F;
+    return ImColor::HSV(fract(base + offset), 0.78F, 1.0F, alpha);
+}
+
+void drawReactiveScene(ImDrawList* drawList,
+                       ImVec2 topLeft,
+                       ImVec2 size,
+                       const TunerReading& reading,
+                       float activity,
+                       const std::vector<float>& samples,
+                       double time)
+{
+    const auto bottomRight = ImVec2{topLeft.x + size.x, topLeft.y + size.y};
+    const auto center = ImVec2{topLeft.x + size.x * 0.5F, topLeft.y + size.y * 0.56F};
+    const auto note = reading.midiNote;
+    const auto frequency = std::max(reading.frequency, 82.0F);
+    const auto cents = std::clamp(reading.cents, -50.0F, 50.0F);
+    const auto pulse = std::clamp(activity, 0.0F, 1.0F);
+
+    drawList->AddRectFilled(topLeft, bottomRight, IM_COL32(7, 8, 13, 255));
+    for (int band = 0; band < 18; ++band) {
+        const auto t = static_cast<float>(band) / 17.0F;
+        const auto y0 = topLeft.y + size.y * t;
+        const auto y1 = topLeft.y + size.y * (t + 1.0F / 17.0F);
+        const auto alpha = static_cast<int>(20 + (1.0F - t) * 36.0F);
+        drawList->AddRectFilled(
+            ImVec2{topLeft.x, y0},
+            ImVec2{bottomRight.x, y1},
+            noteColor(note, t * 0.12F + static_cast<float>(time * 0.015), static_cast<float>(alpha) / 255.0F)
+        );
     }
-    drawList->AddPolyline(points.data(), static_cast<int>(points.size()), IM_COL32(72, 219, 166, 255), ImDrawFlags_None, 4.0F);
+
+    const auto maxRadius = std::min(size.x, size.y) * (0.18F + pulse * 0.16F);
+    for (int ring = 0; ring < 7; ++ring) {
+        const auto radius = maxRadius + static_cast<float>(ring) * 34.0F + std::sin(static_cast<float>(time) * 1.4F + ring) * 8.0F;
+        const auto thickness = 1.4F + pulse * 3.2F;
+        drawList->AddCircle(center, radius, noteColor(note, ring * 0.045F, 0.42F), 180, thickness);
+    }
+
+    for (int orbit = 0; orbit < 5; ++orbit) {
+        const auto radiusX = maxRadius * (1.15F + orbit * 0.28F);
+        const auto radiusY = maxRadius * (0.42F + orbit * 0.08F);
+        const auto tilt = static_cast<float>(orbit) * 0.64F + cents * 0.01F;
+        const auto speed = 0.42F + orbit * 0.11F + frequency * 0.00025F;
+        for (int body = 0; body < 10; ++body) {
+            const auto angle = static_cast<float>(time * speed) + body * 0.6283185F + orbit;
+            const auto x = std::cos(angle) * radiusX;
+            const auto y = std::sin(angle) * radiusY;
+            const auto px = center.x + x * std::cos(tilt) - y * std::sin(tilt);
+            const auto py = center.y + x * std::sin(tilt) + y * std::cos(tilt);
+            const auto bodyRadius = 2.5F + pulse * 7.0F + hash01(body * 9.0F + orbit) * 3.0F;
+            drawList->AddCircleFilled(ImVec2{px, py}, bodyRadius, noteColor(note, body * 0.017F + orbit * 0.05F, 0.82F), 18);
+        }
+    }
+
+    constexpr int particleCount = 900;
+    for (int index = 0; index < particleCount; ++index) {
+        const auto seed = static_cast<float>(index);
+        const auto lane = hash01(seed * 0.37F);
+        const auto spiral = static_cast<float>(time) * (0.08F + hash01(seed) * 0.22F) + seed * 0.034F;
+        const auto radius = std::sqrt(lane) * std::min(size.x, size.y) * (0.18F + pulse * 0.54F);
+        const auto wobble = std::sin(static_cast<float>(time) * 1.7F + seed) * (8.0F + pulse * 38.0F);
+        const auto px = center.x + std::cos(spiral) * (radius + wobble);
+        const auto py = center.y + std::sin(spiral * 1.37F) * (radius * 0.62F + wobble * 0.4F);
+        const auto particleRadius = 0.8F + pulse * 2.4F + hash01(seed * 5.3F) * 1.2F;
+        const auto alpha = 0.20F + pulse * 0.66F;
+        drawList->AddCircleFilled(ImVec2{px, py}, particleRadius, noteColor(note, hash01(seed) * 0.22F, alpha), 8);
+    }
+
+    if (!samples.empty()) {
+        constexpr int pointCount = 260;
+        std::array<ImVec2, pointCount> upper{};
+        std::array<ImVec2, pointCount> lower{};
+        const auto left = topLeft.x + 28.0F;
+        const auto right = bottomRight.x - 28.0F;
+        const auto baseY = topLeft.y + size.y * 0.72F;
+        const auto amp = 42.0F + pulse * 120.0F;
+        for (int index = 0; index < pointCount; ++index) {
+            const auto t = static_cast<float>(index) / static_cast<float>(pointCount - 1);
+            const auto sampleIndex = std::min<std::size_t>(
+                samples.size() - 1,
+                static_cast<std::size_t>(t * static_cast<float>(samples.size() - 1))
+            );
+            const auto sample = samples[sampleIndex];
+            const auto shimmer = std::sin(t * 30.0F + static_cast<float>(time) * 3.0F) * pulse * 14.0F;
+            const auto x = left + (right - left) * t;
+            upper[static_cast<std::size_t>(index)] = ImVec2{x, baseY + sample * amp + shimmer};
+            lower[static_cast<std::size_t>(index)] = ImVec2{x, baseY - sample * amp * 0.56F - shimmer * 0.4F};
+        }
+        drawList->AddPolyline(upper.data(), pointCount, noteColor(note, 0.08F, 0.94F), ImDrawFlags_None, 4.0F + pulse * 3.0F);
+        drawList->AddPolyline(lower.data(), pointCount, noteColor(note, 0.28F, 0.55F), ImDrawFlags_None, 2.0F + pulse * 2.0F);
+    }
+
+    const auto flashRadius = 18.0F + pulse * 82.0F;
+    drawList->AddCircleFilled(center, flashRadius, noteColor(note, 0.0F, 0.18F + pulse * 0.18F), 80);
+    drawList->AddText(ImVec2{topLeft.x + 28.0F, topLeft.y + 24.0F}, IM_COL32(235, 245, 245, 255), "ILYS LIVE VISUALIZER");
 }
 
 } // namespace
@@ -317,8 +405,9 @@ int main()
         glfwPollEvents();
 
         const auto now = glfwGetTime();
+        auto currentSamples = snapshotAudio(state);
         if (now - lastAnalysis > 0.045) {
-            auto audioReading = detectPitch(snapshotAudio(state));
+            auto audioReading = detectPitch(currentSamples);
             const auto midiFrequency = state.midiFrequency.load(std::memory_order_relaxed);
             const auto midiHit = state.midiHit.load(std::memory_order_relaxed);
             if (audioReading.frequency > 0.0F) {
@@ -345,48 +434,48 @@ int main()
         ImGui::Begin("Audiovisualizer", nullptr,
             ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 
-        ImGui::TextUnformatted("ILYS Audiovisualizer");
-        ImGui::SameLine();
-        ImGui::TextColored(capture.running() ? ImVec4{0.45F, 1.0F, 0.72F, 1.0F} : ImVec4{1.0F, 0.52F, 0.42F, 1.0F},
-                           capture.running() ? "audio input active" : "audio input unavailable");
-        ImGui::Text("Audio: %s", state.audioDeviceName.c_str());
-        ImGui::Text("MIDI:  %s", state.midiDeviceName.c_str());
-        ImGui::Separator();
-
         const auto frequency = reading.frequency;
         const auto cents = reading.cents;
         const auto note = noteName(reading.midiNote);
-        ImGui::SetWindowFontScale(1.6F);
-        ImGui::Text("Note  %s", note.c_str());
-        ImGui::SetWindowFontScale(1.0F);
-        ImGui::Text("Frequency: %.2f Hz", frequency);
-        ImGui::Text("Detune:    %+.1f cents", cents);
-        ImGui::Text("Source:    %s", reading.source.c_str());
-
-        const auto gaugeWidth = ImGui::GetContentRegionAvail().x;
-        const auto gaugeStart = ImGui::GetCursorScreenPos();
-        const auto gaugeHeight = 54.0F;
         auto* drawList = ImGui::GetWindowDrawList();
+        const auto sceneTop = ImGui::GetCursorScreenPos();
+        const auto sceneSize = ImGui::GetContentRegionAvail();
+        drawReactiveScene(drawList, sceneTop, sceneSize, reading, activity, currentSamples, now);
+
+        const auto panelPos = ImVec2{sceneTop.x + 28.0F, sceneTop.y + 52.0F};
+        const auto panelSize = ImVec2{310.0F, 174.0F};
+        drawList->AddRectFilled(panelPos, ImVec2{panelPos.x + panelSize.x, panelPos.y + panelSize.y}, IM_COL32(8, 10, 15, 205), 10.0F);
+        drawList->AddRect(panelPos, ImVec2{panelPos.x + panelSize.x, panelPos.y + panelSize.y}, noteColor(reading.midiNote, 0.0F, 0.65F), 10.0F, 0, 2.0F);
+
+        ImGui::SetCursorScreenPos(ImVec2{panelPos.x + 18.0F, panelPos.y + 16.0F});
+        ImGui::TextColored(capture.running() ? ImVec4{0.45F, 1.0F, 0.72F, 1.0F} : ImVec4{1.0F, 0.52F, 0.42F, 1.0F},
+                           capture.running() ? "audio input active" : "audio input unavailable");
+        ImGui::Text("Audio: %.26s", state.audioDeviceName.c_str());
+        ImGui::Text("MIDI:  %.26s", state.midiDeviceName.c_str());
+        ImGui::SetWindowFontScale(2.1F);
+        ImGui::Text("%s", note.c_str());
+        ImGui::SetWindowFontScale(1.0F);
+        ImGui::SameLine();
+        ImGui::Text(" %.2f Hz", frequency);
+        ImGui::Text("Detune %+.1f cents    Source %s", cents, reading.source.c_str());
+
+        const auto gaugeWidth = panelSize.x - 36.0F;
+        const auto gaugeStart = ImVec2{panelPos.x + 18.0F, panelPos.y + panelSize.y - 40.0F};
+        const auto gaugeHeight = 22.0F;
         drawList->AddRectFilled(gaugeStart, ImVec2{gaugeStart.x + gaugeWidth, gaugeStart.y + gaugeHeight},
-                                IM_COL32(24, 27, 31, 255), 6.0F);
+                                IM_COL32(24, 27, 31, 230), 6.0F);
         const auto centerX = gaugeStart.x + gaugeWidth * 0.5F;
-        drawList->AddLine(ImVec2{centerX, gaugeStart.y + 8.0F}, ImVec2{centerX, gaugeStart.y + gaugeHeight - 8.0F},
+        drawList->AddLine(ImVec2{centerX, gaugeStart.y + 3.0F}, ImVec2{centerX, gaugeStart.y + gaugeHeight - 3.0F},
                           IM_COL32(230, 230, 220, 255), 2.0F);
         const auto needleX = centerX + std::clamp(cents, -50.0F, 50.0F) / 50.0F * (gaugeWidth * 0.45F);
         const auto needleColor = std::abs(cents) < 5.0F ? IM_COL32(72, 219, 166, 255) : IM_COL32(245, 190, 82, 255);
         drawList->AddTriangleFilled(
-            ImVec2{needleX, gaugeStart.y + 10.0F},
-            ImVec2{needleX - 9.0F, gaugeStart.y + gaugeHeight - 10.0F},
-            ImVec2{needleX + 9.0F, gaugeStart.y + gaugeHeight - 10.0F},
+            ImVec2{needleX, gaugeStart.y + 2.0F},
+            ImVec2{needleX - 8.0F, gaugeStart.y + gaugeHeight - 3.0F},
+            ImVec2{needleX + 8.0F, gaugeStart.y + gaugeHeight - 3.0F},
             needleColor
         );
-        ImGui::Dummy(ImVec2{gaugeWidth, gaugeHeight + 16.0F});
-
-        const auto stringTop = ImGui::GetCursorScreenPos();
-        const auto stringHeight = std::max(160.0F, ImGui::GetContentRegionAvail().y - 18.0F);
-        drawString(drawList, stringTop, ImVec2{ImGui::GetContentRegionAvail().x, stringHeight},
-                   activity, std::max(frequency, 110.0F), now);
-        ImGui::Dummy(ImVec2{ImGui::GetContentRegionAvail().x, stringHeight});
+        ImGui::SetCursorScreenPos(ImVec2{sceneTop.x, sceneTop.y + sceneSize.y});
 
         ImGui::End();
         ImGui::Render();

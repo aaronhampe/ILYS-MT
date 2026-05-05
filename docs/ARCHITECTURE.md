@@ -77,12 +77,12 @@ USB keyboards and synths may expose either audio, MIDI, or both. ILYS-MT now has
 
 The audiovisualizer is intentionally separate from the DAW shell. It opens a GLFW/ImGui window, captures the default mono audio input with miniaudio, and listens to the first available MIDI input through the existing MIDI layer.
 
-The first visualization mode is tuner-like:
+The visualization mode combines tuner data with performance visuals:
 
 - pitch detection from audio input through autocorrelation
 - immediate note/frequency updates from MIDI note-on events
 - nearest-note and cents detune calculation
-- reactive animated string drawn in the GUI
+- note-colored orbit rings, waveform ribbons, pulsing centers, and reactive particles drawn in the GUI
 
 ## Real-Time Rules
 

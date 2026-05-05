@@ -111,7 +111,7 @@ The audiovisualizer is built as a separate native GUI:
 ./build/debug/ilys-audiovisualizer
 ```
 
-It also opens from the ILYS-MT shell with `/audiovisualizer`. The first version is a tuner-style tool: it analyzes the default audio input, listens to the first MIDI input when present, shows frequency, note, cents detune, and renders an animated string that reacts to incoming signal.
+It also opens from the ILYS-MT shell with `/audiovisualizer`. It analyzes the default audio input, listens to the first MIDI input when present, shows frequency, note, and cents detune, and renders a full-window reactive scene with note-colored particles, orbit rings, waveform ribbons, and pulsing forms for live guitar visuals.
 
 ## Preset Library
 
