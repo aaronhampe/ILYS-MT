@@ -40,9 +40,12 @@ Project mode owns the region workflow:
 /regions
 /bpm <value>
 /key <name>
+/metronome on|off
+/countin <beats>
 /record
 /play
-/loop start
+/play <start> <end>
+/loop start [start] [end]
 /loop stop
 /import "path"
 /delete recording
@@ -50,9 +53,9 @@ Project mode owns the region workflow:
 /preset region <category> <id>
 ```
 
-Recording is currently a mono clip captured from the monitored instrument signal. Region metadata is stored in `regions/regions.json`, recorded clips are stored as float WAV files under `audio/`, and playback mixes every unmuted recorded region from the beginning at the same time.
+Recording is currently a mono clip captured from the monitored instrument signal. Region metadata is stored in `regions/regions.json`, recorded clips are stored as float WAV files under `audio/`, and playback mixes every unmuted recorded region from the beginning at the same time. The audio callback also generates the metronome click, handles count-in timing before capture begins, and loops exact beat ranges by translating project BPM to sample offsets.
 
-The project command surface now covers the core tracking loop found in most DAWs: transport-style play/record/stop, loop playback, input monitoring, tempo and key metadata, region import/clear, overwrite protection, per-region mute, and per-region instrument preset assignment. More advanced DAW features such as punch in/out, comping/takes, automation, markers, metronome, editing tools, and time-stretching should wait for a real transport and timeline model.
+The project command surface now covers the core tracking loop found in most DAWs: transport-style play/record/stop, beat-range playback, loop playback, input monitoring, tempo and key metadata, metronome count-in, region import/clear, overwrite protection, per-region mute, and per-region instrument preset assignment. More advanced DAW features such as punch in/out, comping/takes, automation, markers, editing tools, and time-stretching should wait for a real transport and timeline model.
 
 ## Audio Model
 

@@ -29,7 +29,10 @@ public:
     void noteOn(unsigned int note, float velocity) noexcept;
     void noteOff(unsigned int note) noexcept;
     core::Result start();
-    core::Result beginRecording(double maxSeconds);
+    core::Result beginRecording(double bpm,
+                                bool metronomeEnabled,
+                                unsigned int countInBeats,
+                                double maxSeconds);
     AudioClip finishRecording();
     core::Result playClips(std::vector<AudioClip> clips, bool loop, bool monitorInput);
     core::Result loadClipFromFile(const std::filesystem::path& path, AudioClip& clip);
@@ -52,6 +55,7 @@ private:
     core::Result startStream(bool needsAudioInput, const std::string& successMessage);
     void mixPlayback(float* output, unsigned int outputChannels, ma_uint32 frameCount) noexcept;
     void captureInput(const float* input, unsigned int inputChannels, ma_uint32 frameCount) noexcept;
+    void mixMetronome(float* output, unsigned int outputChannels, ma_uint32 frameCount) noexcept;
 
     ma_context context_{};
     ma_device device_{};
@@ -64,11 +68,16 @@ private:
     std::atomic<bool> recording_{false};
     std::atomic<bool> playback_{false};
     std::atomic<bool> loopPlayback_{false};
+    std::atomic<bool> metronome_{false};
     std::vector<float> recordingBuffer_;
     std::vector<AudioClip> playbackClips_;
     std::size_t playbackPosition_{0};
     std::size_t playbackLength_{0};
     std::size_t maxRecordingSamples_{0};
+    std::size_t recordingDelaySamples_{0};
+    std::size_t metronomePosition_{0};
+    std::size_t metronomeBeatSamples_{24000};
+    std::size_t metronomeClickSamples_{2400};
 };
 
 } // namespace ilys::audio

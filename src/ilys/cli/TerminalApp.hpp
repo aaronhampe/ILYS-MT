@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ilys::cli {
@@ -56,14 +57,20 @@ private:
     void selectRegion(const std::string& name);
     void muteSelectedRegion();
     void recordSelectedRegion();
-    void playRegions(bool loop, bool monitorInput);
+    void playRegions(bool loop, bool monitorInput, std::optional<std::pair<unsigned int, unsigned int>> beatRange);
     void stopLoop();
     void importIntoSelectedRegion(const std::filesystem::path& path);
     void deleteSelectedRecording();
     void setProjectBpm(const std::string& value);
     void setProjectKey(std::string key);
+    void setMetronome(std::string value);
+    void setCountIn(const std::string& value);
     void setSelectedRegionPreset(const std::string& category, const std::string& id);
     void applySelectedRegionPreset();
+    [[nodiscard]] std::size_t samplesPerBeat(unsigned int sampleRate) const;
+    [[nodiscard]] audio::AudioClip clipForBeatRange(const audio::AudioClip& clip,
+                                                    unsigned int startBeat,
+                                                    unsigned int endBeat) const;
     bool executeStartupCommand(const std::vector<std::string>& tokens);
     bool executeProjectCommand(const std::vector<std::string>& tokens);
     bool execute(const std::string& line);
@@ -78,6 +85,10 @@ private:
     std::optional<std::size_t> selectedRegionIndex_;
     double projectBpm_{120.0};
     std::string projectKey_{"C"};
+    bool metronomeEnabled_{true};
+    unsigned int countInBeats_{4};
+    unsigned int loopStartBeat_{1};
+    unsigned int loopEndBeat_{16};
     bool loopActive_{false};
     std::string currentPresetCategory_{"guitar"};
     std::string currentPresetId_{"clean_di"};

@@ -68,9 +68,12 @@ core::Result AudioEngine::start()
     return impl_->start();
 }
 
-core::Result AudioEngine::beginRecording(double maxSeconds)
+core::Result AudioEngine::beginRecording(double bpm,
+                                         bool metronomeEnabled,
+                                         unsigned int countInBeats,
+                                         double maxSeconds)
 {
-    return impl_->beginRecording(maxSeconds);
+    return impl_->beginRecording(bpm, metronomeEnabled, countInBeats, maxSeconds);
 }
 
 AudioClip AudioEngine::finishRecording()

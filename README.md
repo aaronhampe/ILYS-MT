@@ -66,10 +66,13 @@ Creating a project also opens it. Once the prompt shows the project name, the mu
 /regions
 /bpm 128
 /key "E minor"
+/metronome on
+/countin 4
 /preset region guitar blues_edge
 /record
 /play
-/loop start
+/play 1 16
+/loop start 1 16
 /loop stop
 /import "/path/to/file.wav"
 /delete recording
@@ -95,9 +98,9 @@ Guitar presets process incoming audio from an audio interface. Piano and synth p
 
 Projects are stored under `projects/<name>` and currently contain starter folders for audio, MIDI, regions, and mixes. The `audiovisualizer` command creates the top-level `audiovisualizer` workspace for the future visualizer module.
 
-Regions are stored in the project metadata. `/record` records the selected region from the monitored instrument signal until you press space and writes the clip to the project's `audio` folder. If the selected region already contains audio, ILYS-MT asks for overwrite confirmation. `/play` starts all unmuted recorded regions together. `/loop start` repeats the unmuted regions while keeping live input monitoring active so you can jam over the loop.
+Regions are stored in the project metadata. `/record` records the selected region from the monitored instrument signal until you press space and writes the clip to the project's `audio` folder. If the metronome is on, recording starts with the configured count-in, then the click keeps playing at the project BPM while recording. If the selected region already contains audio, ILYS-MT asks for overwrite confirmation. `/play` starts all unmuted recorded regions together. `/play 1 16` plays a beat range once. `/loop start 1 16` repeats that beat range while keeping live input monitoring active so you can jam over the loop.
 
-Each project stores BPM and key in `project.json`. Each region stores its own preset assignment, mute state, and optional audio file. WAV and MP3 import is handled through the audio backend and copied into the selected region as a project-local WAV.
+Each project stores BPM, key, metronome, count-in, and default loop range in `project.json`. Each region stores its own preset assignment, mute state, and optional audio file. WAV and MP3 import is handled through the audio backend and copied into the selected region as a project-local WAV.
 
 ## Preset Library
 

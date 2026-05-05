@@ -1,8 +1,10 @@
 #include "ilys/cli/TerminalApp.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstddef>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -197,6 +199,50 @@ audio::AudioClip readFloatWav(const std::filesystem::path& path)
     return clip;
 }
 
+std::string beatRuler(unsigned int visibleBeats, std::size_t width)
+{
+    std::string ruler;
+    if (visibleBeats == 0 || width == 0) {
+        return std::string(width, ' ');
+    }
+
+    for (unsigned int beat = 1; beat <= visibleBeats; ++beat) {
+        ruler += std::to_string(beat);
+        if (beat == visibleBeats) {
+            break;
+        }
+        ruler += beat % 4 == 0 ? " | " : "  ";
+    }
+
+    if (ruler.size() > width) {
+        ruler.resize(width);
+    } else if (ruler.size() < width) {
+        ruler.append(width - ruler.size(), ' ');
+    }
+    return ruler;
+}
+
+std::string regionLane(const audio::AudioClip& clip, double bpm, unsigned int visibleBeats, std::size_t width, bool muted)
+{
+    std::string lane(width, ' ');
+    if (!clip.samples.empty() && clip.sampleRate > 0) {
+        const auto beatSeconds = 60.0 / std::clamp(bpm, 20.0, 300.0);
+        const auto visibleSeconds = beatSeconds * static_cast<double>(visibleBeats);
+        const auto clipSeconds = static_cast<double>(clip.samples.size()) / static_cast<double>(clip.sampleRate);
+        const auto filled = std::max<std::size_t>(
+            1,
+            std::min<std::size_t>(width, static_cast<std::size_t>(std::ceil((clipSeconds / visibleSeconds) * static_cast<double>(width))))
+        );
+        std::fill(lane.begin(), lane.begin() + static_cast<std::ptrdiff_t>(filled), '#');
+    }
+
+    if (muted && !lane.empty()) {
+        lane[0] = 'M';
+    }
+
+    return lane;
+}
+
 void printResult(const core::Result& result)
 {
     std::cout << (result.ok ? "ok: " : "error: ") << result.message << '\n';
@@ -282,9 +328,12 @@ void TerminalApp::printProjectHelp() const
         << "  /regions                      show project region view\n"
         << "  /bpm <value>                  set project BPM\n"
         << "  /key <name>                   set project key\n"
+        << "  /metronome on|off             enable or disable recording click\n"
+        << "  /countin <beats>              set recording count-in beats\n"
         << "  /record                       record into the selected region\n"
         << "  /play                         play all unmuted recorded regions\n"
-        << "  /loop start                   loop playback and monitor live input\n"
+        << "  /play <start> <end>           play a beat range once\n"
+        << "  /loop start [start] [end]     loop beat range and monitor live input\n"
         << "  /loop stop                    stop loop playback\n"
         << "  /import \"path\"                import WAV or MP3 into selected region\n"
         << "  /delete recording             delete audio from selected region\n"
@@ -392,16 +441,8 @@ void TerminalApp::printRegion(const Region& region) const
 {
     constexpr auto width = 64;
     constexpr auto innerWidth = width - 2;
-    std::string contents(innerWidth, ' ');
-
-    if (!region.clip.samples.empty()) {
-        const auto barWidth = std::min<std::size_t>(innerWidth, region.clip.samples.size() / 2048 + 1);
-        std::fill(contents.begin(), contents.begin() + static_cast<std::ptrdiff_t>(barWidth), '#');
-    }
-
-    if (region.muted && !contents.empty()) {
-        contents[0] = 'M';
-    }
+    const auto visibleBeats = std::max(16U, loopEndBeat_);
+    const auto contents = regionLane(region.clip, projectBpm_, visibleBeats, innerWidth, region.muted);
 
     const auto duration = region.clip.sampleRate == 0
         ? 0.0
@@ -416,6 +457,7 @@ void TerminalApp::printRegion(const Region& region) const
         std::cout << " " << std::fixed << std::setprecision(2) << duration << "s";
     }
     std::cout << '\n'
+              << " " << beatRuler(visibleBeats, innerWidth) << '\n'
               << std::string(width, '-') << '\n'
               << '|' << contents << "|\n"
               << std::string(width, '-') << '\n';
@@ -444,7 +486,10 @@ void TerminalApp::printProjectUi() const
         << "BPM: " << std::fixed << std::setprecision(1) << projectBpm_
         << "    Key: " << projectKey_
         << "    Regions: " << regions_.size()
-        << "    Loop: " << (loopActive_ ? "on" : "off") << '\n'
+        << "    Metronome: " << (metronomeEnabled_ ? "on" : "off")
+        << "    Count-in: " << countInBeats_
+        << "    Loop: " << (loopActive_ ? "on" : "off")
+        << " [" << loopStartBeat_ << "-" << loopEndBeat_ << "]\n"
         << std::string(78, '=') << '\n';
 
     if (regions_.empty()) {
@@ -457,6 +502,8 @@ void TerminalApp::printProjectUi() const
         const auto duration = region.clip.sampleRate == 0
             ? 0.0
             : static_cast<double>(region.clip.samples.size()) / static_cast<double>(region.clip.sampleRate);
+        const auto visibleBeats = std::max(16U, loopEndBeat_);
+        constexpr auto laneWidth = 62U;
 
         std::cout
             << (selected ? "> " : "  ")
@@ -466,7 +513,9 @@ void TerminalApp::printProjectUi() const
             << std::right << std::setw(6) << std::fixed << std::setprecision(2) << duration << "s"
             << "  " << std::left << std::setw(18) << (region.presetCategory + "/" + region.presetId)
             << "  " << (region.clip.samples.empty() ? "empty" : region.audioFile)
-            << '\n';
+            << '\n'
+            << "    " << beatRuler(visibleBeats, laneWidth) << '\n'
+            << "    " << regionLane(region.clip, projectBpm_, visibleBeats, laneWidth, region.muted) << '\n';
     }
 
     std::cout << std::string(78, '=') << '\n';
@@ -479,6 +528,9 @@ void TerminalApp::printStatus() const
         << "project: " << (activeProject_ ? activeProject_->name : "none") << '\n'
         << "bpm: " << projectBpm_ << '\n'
         << "key: " << projectKey_ << '\n'
+        << "metronome: " << (metronomeEnabled_ ? "on" : "off") << '\n'
+        << "count-in: " << countInBeats_ << " beats\n"
+        << "loop range: " << loopStartBeat_ << "-" << loopEndBeat_ << '\n'
         << "state: " << (audio_.isRunning() ? "monitoring" : "stopped") << '\n'
         << "preset: " << currentPresetCategory_ << "/" << currentPresetId_ << '\n'
         << "source: " << (currentPresetUsesMidi_ ? "midi instrument" : "audio monitor") << '\n'
@@ -552,6 +604,10 @@ void TerminalApp::loadProjectSettings()
 {
     projectBpm_ = 120.0;
     projectKey_ = "C";
+    metronomeEnabled_ = true;
+    countInBeats_ = 4;
+    loopStartBeat_ = 1;
+    loopEndBeat_ = 16;
     if (!activeProject_) {
         return;
     }
@@ -564,6 +620,13 @@ void TerminalApp::loadProjectSettings()
     const auto json = nlohmann::json::parse(input);
     projectBpm_ = json.value("bpm", projectBpm_);
     projectKey_ = json.value("key", projectKey_);
+    metronomeEnabled_ = json.value("metronome", metronomeEnabled_);
+    countInBeats_ = json.value("count_in_beats", countInBeats_);
+    loopStartBeat_ = json.value("loop_start_beat", loopStartBeat_);
+    loopEndBeat_ = json.value("loop_end_beat", loopEndBeat_);
+    if (loopEndBeat_ < loopStartBeat_) {
+        loopEndBeat_ = loopStartBeat_;
+    }
 }
 
 void TerminalApp::saveProjectSettings() const
@@ -577,7 +640,11 @@ void TerminalApp::saveProjectSettings() const
         {"version", 1},
         {"type", "ilys-mt-project"},
         {"bpm", projectBpm_},
-        {"key", projectKey_}
+        {"key", projectKey_},
+        {"metronome", metronomeEnabled_},
+        {"count_in_beats", countInBeats_},
+        {"loop_start_beat", loopStartBeat_},
+        {"loop_end_beat", loopEndBeat_}
     };
 
     std::ofstream output{activeProject_->path / "project.json"};
@@ -756,7 +823,7 @@ void TerminalApp::recordSelectedRegion()
 
     applySelectedRegionPreset();
 
-    const auto result = audio_.beginRecording();
+    const auto result = audio_.beginRecording(projectBpm_, metronomeEnabled_, countInBeats_);
     printResult(result);
     if (!result.ok) {
         return;
@@ -771,13 +838,33 @@ void TerminalApp::recordSelectedRegion()
     printRegion(*region);
 }
 
-void TerminalApp::playRegions(bool loop, bool monitorInput)
+void TerminalApp::playRegions(bool loop,
+                              bool monitorInput,
+                              std::optional<std::pair<unsigned int, unsigned int>> beatRange)
 {
     std::vector<audio::AudioClip> clips;
+    if (beatRange && (beatRange->first == 0 || beatRange->second < beatRange->first)) {
+        std::cout << "error: Beat ranges start at 1 and the end beat must be greater than or equal to the start beat.\n";
+        return;
+    }
+
     for (const auto& region : regions_) {
         if (!region.muted && !region.clip.samples.empty()) {
-            clips.push_back(region.clip);
+            if (beatRange) {
+                auto clipped = clipForBeatRange(region.clip, beatRange->first, beatRange->second);
+                if (!clipped.samples.empty()) {
+                    clips.push_back(std::move(clipped));
+                }
+            } else {
+                clips.push_back(region.clip);
+            }
         }
+    }
+
+    if (loop && beatRange) {
+        loopStartBeat_ = beatRange->first;
+        loopEndBeat_ = beatRange->second;
+        saveProjectSettings();
     }
 
     const auto result = audio_.playClips(std::move(clips), loop, monitorInput);
@@ -878,6 +965,38 @@ void TerminalApp::setProjectKey(std::string key)
     printProjectUi();
 }
 
+void TerminalApp::setMetronome(std::string value)
+{
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
+        return static_cast<char>(std::tolower(character));
+    });
+
+    if (value == "on") {
+        metronomeEnabled_ = true;
+    } else if (value == "off") {
+        metronomeEnabled_ = false;
+    } else {
+        std::cout << "error: Use /metronome on or /metronome off.\n";
+        return;
+    }
+
+    saveProjectSettings();
+    printProjectUi();
+}
+
+void TerminalApp::setCountIn(const std::string& value)
+{
+    const auto beats = static_cast<unsigned int>(std::stoul(value));
+    if (beats > 16) {
+        std::cout << "error: Count-in must be between 0 and 16 beats.\n";
+        return;
+    }
+
+    countInBeats_ = beats;
+    saveProjectSettings();
+    printProjectUi();
+}
+
 void TerminalApp::setSelectedRegionPreset(const std::string& category, const std::string& id)
 {
     auto* region = selectedRegion();
@@ -913,6 +1032,46 @@ void TerminalApp::applySelectedRegionPreset()
     currentPresetCategory_ = preset.category;
     currentPresetId_ = preset.id;
     currentPresetUsesMidi_ = preset.source == "midi";
+}
+
+std::size_t TerminalApp::samplesPerBeat(unsigned int sampleRate) const
+{
+    return std::max<std::size_t>(
+        1,
+        static_cast<std::size_t>(
+            std::round((60.0 / std::clamp(projectBpm_, 20.0, 300.0)) * static_cast<double>(sampleRate))
+        )
+    );
+}
+
+audio::AudioClip TerminalApp::clipForBeatRange(const audio::AudioClip& clip,
+                                               unsigned int startBeat,
+                                               unsigned int endBeat) const
+{
+    audio::AudioClip result;
+    result.sampleRate = clip.sampleRate;
+    if (clip.samples.empty() || clip.sampleRate == 0 || startBeat == 0 || endBeat < startBeat) {
+        return result;
+    }
+
+    const auto beatSamples = samplesPerBeat(clip.sampleRate);
+    const auto startSample = static_cast<std::size_t>(startBeat - 1) * beatSamples;
+    const auto endSampleExclusive = static_cast<std::size_t>(endBeat) * beatSamples;
+    const auto loopSamples = endSampleExclusive - startSample;
+    result.samples.assign(loopSamples, 0.0F);
+
+    if (startSample >= clip.samples.size()) {
+        return result;
+    }
+
+    const auto sourceEnd = std::min<std::size_t>(clip.samples.size(), endSampleExclusive);
+    std::copy(
+        clip.samples.begin() + static_cast<std::ptrdiff_t>(startSample),
+        clip.samples.begin() + static_cast<std::ptrdiff_t>(sourceEnd),
+        result.samples.begin()
+    );
+
+    return result;
 }
 
 bool TerminalApp::executeStartupCommand(const std::vector<std::string>& tokens)
@@ -980,12 +1139,26 @@ bool TerminalApp::executeProjectCommand(const std::vector<std::string>& tokens)
         setProjectBpm(tokens[1]);
     } else if (command == "key" && tokens.size() == 2) {
         setProjectKey(tokens[1]);
+    } else if (command == "metronome" && tokens.size() == 2) {
+        setMetronome(tokens[1]);
+    } else if ((command == "countin" || command == "count-in") && tokens.size() == 2) {
+        setCountIn(tokens[1]);
     } else if (command == "record" && tokens.size() == 1) {
         recordSelectedRegion();
     } else if (command == "play" && tokens.size() == 1) {
-        playRegions(false, false);
+        playRegions(false, false, std::nullopt);
+    } else if (command == "play" && tokens.size() == 3) {
+        playRegions(false, false, std::make_pair(
+            static_cast<unsigned int>(std::stoul(tokens[1])),
+            static_cast<unsigned int>(std::stoul(tokens[2]))
+        ));
     } else if (command == "loop" && tokens.size() == 2 && tokens[1] == "start") {
-        playRegions(true, true);
+        playRegions(true, true, std::make_pair(loopStartBeat_, loopEndBeat_));
+    } else if (command == "loop" && tokens.size() == 4 && tokens[1] == "start") {
+        playRegions(true, true, std::make_pair(
+            static_cast<unsigned int>(std::stoul(tokens[2])),
+            static_cast<unsigned int>(std::stoul(tokens[3]))
+        ));
     } else if (command == "loop" && tokens.size() == 2 && tokens[1] == "stop") {
         stopLoop();
     } else if (command == "import" && tokens.size() == 2) {

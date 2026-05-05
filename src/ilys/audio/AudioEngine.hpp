@@ -47,7 +47,10 @@ public:
     void noteOn(unsigned int note, float velocity) noexcept;
     void noteOff(unsigned int note) noexcept;
     core::Result start();
-    core::Result beginRecording(double maxSeconds = 300.0);
+    core::Result beginRecording(double bpm,
+                                bool metronomeEnabled,
+                                unsigned int countInBeats,
+                                double maxSeconds = 300.0);
     AudioClip finishRecording();
     core::Result playClips(std::vector<AudioClip> clips, bool loop = false, bool monitorInput = false);
     core::Result loadClipFromFile(const std::filesystem::path& path, AudioClip& clip);

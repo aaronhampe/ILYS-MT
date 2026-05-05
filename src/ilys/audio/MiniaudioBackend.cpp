@@ -1,6 +1,7 @@
 #include "ilys/audio/MiniaudioBackend.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <sstream>
 #include <stdexcept>
 
@@ -275,7 +276,10 @@ core::Result AudioEngine::Impl::startStream(bool needsAudioInput, const std::str
     return core::Result::success(successMessage);
 }
 
-core::Result AudioEngine::Impl::beginRecording(double maxSeconds)
+core::Result AudioEngine::Impl::beginRecording(double bpm,
+                                               bool metronomeEnabled,
+                                               unsigned int countInBeats,
+                                               double maxSeconds)
 {
     if (recording_.load(std::memory_order_relaxed)) {
         return core::Result::failure("Recording is already active.");
@@ -290,18 +294,31 @@ core::Result AudioEngine::Impl::beginRecording(double maxSeconds)
         return streamResult;
     }
 
+    metronomeBeatSamples_ = static_cast<std::size_t>(
+        (60.0 / std::clamp(bpm, 20.0, 300.0)) * static_cast<double>(settings_.sampleRate)
+    );
+    metronomeBeatSamples_ = std::max<std::size_t>(1, metronomeBeatSamples_);
+    metronomeClickSamples_ = std::max<std::size_t>(1, settings_.sampleRate / 20);
+    metronomePosition_ = 0;
+    recordingDelaySamples_ = metronomeEnabled
+        ? metronomeBeatSamples_ * static_cast<std::size_t>(countInBeats)
+        : 0;
     maxRecordingSamples_ = static_cast<std::size_t>(
         std::max(1.0, maxSeconds) * static_cast<double>(settings_.sampleRate)
     );
     recordingBuffer_.clear();
     recordingBuffer_.reserve(maxRecordingSamples_);
+    metronome_.store(metronomeEnabled, std::memory_order_release);
     recording_.store(true, std::memory_order_release);
-    return core::Result::success("Recording started. Press space to stop.");
+    return core::Result::success(
+        metronomeEnabled ? "Count-in started. Press space to stop recording." : "Recording started. Press space to stop."
+    );
 }
 
 AudioClip AudioEngine::Impl::finishRecording()
 {
     recording_.store(false, std::memory_order_release);
+    metronome_.store(false, std::memory_order_release);
     if (deviceReady_) {
         ma_device_stop(&device_);
         ma_device_uninit(&device_);
@@ -314,6 +331,7 @@ AudioClip AudioEngine::Impl::finishRecording()
     clip.samples = std::move(recordingBuffer_);
     recordingBuffer_.clear();
     maxRecordingSamples_ = 0;
+    recordingDelaySamples_ = 0;
     return clip;
 }
 
@@ -384,6 +402,7 @@ void AudioEngine::Impl::stopPlayback() noexcept
 void AudioEngine::Impl::stop()
 {
     recording_.store(false, std::memory_order_release);
+    metronome_.store(false, std::memory_order_release);
     playback_.store(false, std::memory_order_release);
     loopPlayback_.store(false, std::memory_order_release);
 
@@ -445,16 +464,51 @@ void AudioEngine::Impl::captureInput(const float* input, unsigned int inputChann
         return;
     }
 
+    std::size_t startFrame = 0;
+    if (recordingDelaySamples_ > 0) {
+        const auto skipped = std::min<std::size_t>(recordingDelaySamples_, frameCount);
+        recordingDelaySamples_ -= skipped;
+        startFrame = skipped;
+        if (startFrame >= frameCount) {
+            return;
+        }
+    }
+
     const auto remaining = maxRecordingSamples_ > recordingBuffer_.size()
         ? maxRecordingSamples_ - recordingBuffer_.size()
         : 0;
-    const auto framesToCapture = std::min<std::size_t>(remaining, frameCount);
+    const auto availableFrames = static_cast<std::size_t>(frameCount) - startFrame;
+    const auto framesToCapture = std::min<std::size_t>(remaining, availableFrames);
     for (std::size_t frame = 0; frame < framesToCapture; ++frame) {
-        recordingBuffer_.push_back(input[frame * inputChannels]);
+        const auto sourceFrame = startFrame + frame;
+        recordingBuffer_.push_back(input[sourceFrame * inputChannels]);
     }
 
-    if (framesToCapture < frameCount) {
+    if (framesToCapture < availableFrames) {
         recording_.store(false, std::memory_order_release);
+        metronome_.store(false, std::memory_order_release);
+    }
+}
+
+void AudioEngine::Impl::mixMetronome(float* output, unsigned int outputChannels, ma_uint32 frameCount) noexcept
+{
+    if (!metronome_.load(std::memory_order_acquire) || output == nullptr || outputChannels == 0) {
+        return;
+    }
+
+    for (ma_uint32 frame = 0; frame < frameCount; ++frame) {
+        const auto beatOffset = metronomePosition_ % metronomeBeatSamples_;
+        if (beatOffset < metronomeClickSamples_) {
+            const auto phase = static_cast<double>(beatOffset) / static_cast<double>(settings_.sampleRate);
+            const auto beatIndex = (metronomePosition_ / metronomeBeatSamples_) % 4;
+            const auto frequency = beatIndex == 0 ? 1760.0 : 1200.0;
+            const auto envelope = 1.0 - (static_cast<double>(beatOffset) / static_cast<double>(metronomeClickSamples_));
+            const auto click = static_cast<float>(std::sin(phase * frequency * 6.283185307179586) * envelope * 0.35);
+            for (unsigned int channel = 0; channel < outputChannels; ++channel) {
+                output[(frame * outputChannels) + channel] += click;
+            }
+        }
+        ++metronomePosition_;
     }
 }
 
@@ -481,6 +535,7 @@ void AudioEngine::Impl::dataCallback(ma_device* device,
 
     engine->captureInput(outputSamples, device->playback.channels, frameCount);
     engine->mixPlayback(outputSamples, device->playback.channels, frameCount);
+    engine->mixMetronome(outputSamples, device->playback.channels, frameCount);
 }
 
 } // namespace ilys::audio
