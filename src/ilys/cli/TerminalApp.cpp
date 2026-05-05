@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cstddef>
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -250,9 +251,12 @@ void printResult(const core::Result& result)
 
 } // namespace
 
-TerminalApp::TerminalApp(std::filesystem::path presetRoot, std::filesystem::path projectRoot)
+TerminalApp::TerminalApp(std::filesystem::path presetRoot,
+                         std::filesystem::path projectRoot,
+                         std::filesystem::path audiovisualizerExecutable)
     : presets_{std::move(presetRoot)}
     , projects_{std::move(projectRoot)}
+    , audiovisualizerExecutable_{std::move(audiovisualizerExecutable)}
 {
     midi_.setNoteHandlers(
         [this](unsigned int note, float velocity) {
@@ -310,7 +314,7 @@ void TerminalApp::printStartupHelp() const
         << "  /create project \"name\"        create and open a project\n"
         << "  /open project \"name\"          open an existing project\n"
         << "  /projects                     list existing projects\n"
-        << "  /audiovisualizer              create the audiovisualizer folder\n"
+        << "  /audiovisualizer              open the audiovisualizer GUI\n"
         << "  /input [index]                list or select audio input device\n"
         << "  /output [index]               list or select audio output device\n"
         << "  /midi input [index]           list or select MIDI input device\n"
@@ -434,6 +438,26 @@ void TerminalApp::printProjects() const
 
     for (const auto& project : availableProjects) {
         std::cout << "  " << project.name << "  " << project.path << '\n';
+    }
+}
+
+void TerminalApp::launchAudiovisualizer() const
+{
+    if (!std::filesystem::exists(audiovisualizerExecutable_)) {
+        std::cout << "error: Audiovisualizer executable not found at " << audiovisualizerExecutable_ << '\n';
+        return;
+    }
+
+#if defined(_WIN32)
+    const auto command = "start \"\" \"" + audiovisualizerExecutable_.string() + "\"";
+#else
+    const auto command = "\"" + audiovisualizerExecutable_.string() + "\" &";
+#endif
+    const auto result = std::system(command.c_str());
+    if (result == 0) {
+        std::cout << "ok: Audiovisualizer opened.\n";
+    } else {
+        std::cout << "error: Could not open audiovisualizer.\n";
     }
 }
 
@@ -1097,8 +1121,7 @@ bool TerminalApp::executeStartupCommand(const std::vector<std::string>& tokens)
     } else if (command == "projects") {
         printProjects();
     } else if (command == "audiovisualizer") {
-        std::filesystem::path path;
-        printResult(projects_.ensureAudiovisualizerFolder(path));
+        launchAudiovisualizer();
     } else if (command == "devices") {
         printDevices();
         printMidiDevices();

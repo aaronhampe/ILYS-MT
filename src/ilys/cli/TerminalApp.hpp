@@ -15,7 +15,9 @@ namespace ilys::cli {
 
 class TerminalApp {
 public:
-    TerminalApp(std::filesystem::path presetRoot, std::filesystem::path projectRoot);
+    TerminalApp(std::filesystem::path presetRoot,
+                std::filesystem::path projectRoot,
+                std::filesystem::path audiovisualizerExecutable);
 
     int run();
 
@@ -38,6 +40,7 @@ private:
     void printOutputDevices() const;
     void printMidiDevices() const;
     void printProjects() const;
+    void launchAudiovisualizer() const;
     void printRegion(const Region& region) const;
     void printSelectedRegion() const;
     void printProjectUi() const;
@@ -80,6 +83,7 @@ private:
     midi::MidiEngine midi_;
     presets::PresetManager presets_;
     project::ProjectManager projects_;
+    std::filesystem::path audiovisualizerExecutable_;
     std::optional<project::ProjectInfo> activeProject_;
     std::vector<Region> regions_;
     std::optional<std::size_t> selectedRegionIndex_;

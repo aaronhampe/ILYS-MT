@@ -8,6 +8,7 @@ ILYS-MT is a terminal-first C++ music workstation. The first milestone is small 
 - enumerate MIDI input devices
 - route an instrument input through a preset-driven DSP chain to the selected output
 - play internal piano and synth presets from a USB MIDI controller
+- open a small audiovisualizer GUI for tuner-style input feedback
 - keep the architecture ready for a larger DAW without adding a GUI yet
 
 ## Requirements
@@ -96,11 +97,21 @@ Use headphones or keep your speaker volume low at first. Live monitoring can fee
 
 Guitar presets process incoming audio from an audio interface. Piano and synth presets are MIDI instruments: select an audio output, select a MIDI input, load a piano or synth preset, then start monitoring.
 
-Projects are stored under `projects/<name>` and currently contain starter folders for audio, MIDI, regions, and mixes. The `audiovisualizer` command creates the top-level `audiovisualizer` workspace for the future visualizer module.
+Projects are stored under `projects/<name>` and currently contain starter folders for audio, MIDI, regions, and mixes. The `/audiovisualizer` command opens the separate GUI visualizer from the build directory.
 
 Regions are stored in the project metadata. `/record` records the selected region from the monitored instrument signal until you press space and writes the clip to the project's `audio` folder. If the metronome is on, recording starts with the configured count-in, then the click keeps playing at the project BPM while recording. If the selected region already contains audio, ILYS-MT asks for overwrite confirmation. `/play` starts all unmuted recorded regions together. `/play 1 16` plays a beat range once. `/loop start 1 16` repeats that beat range while keeping live input monitoring active so you can jam over the loop.
 
 Each project stores BPM, key, metronome, count-in, and default loop range in `project.json`. Each region stores its own preset assignment, mute state, and optional audio file. WAV and MP3 import is handled through the audio backend and copied into the selected region as a project-local WAV.
+
+## Audiovisualizer
+
+The audiovisualizer is built as a separate native GUI:
+
+```sh
+./build/debug/ilys-audiovisualizer
+```
+
+It also opens from the ILYS-MT shell with `/audiovisualizer`. The first version is a tuner-style tool: it analyzes the default audio input, listens to the first MIDI input when present, shows frequency, note, cents detune, and renders an animated string that reacts to incoming signal.
 
 ## Preset Library
 

@@ -10,10 +10,11 @@ ILYS-MT starts as a terminal-first audio workstation, but the code is split alon
 - `dsp`: real-time audio processing
 - `presets`: loading JSON presets from instrument category folders
 - `core`: shared small types that do not depend on audio or UI
+- `audiovisualizer`: native GUI tuner/visualizer built as a separate executable
 
 ## Command Model
 
-ILYS-MT starts in a workspace command mode. This mode is intentionally limited to help, project management, device setup, audiovisualizer folder creation, and quitting:
+ILYS-MT starts in a workspace command mode. This mode is intentionally limited to help, project management, device setup, audiovisualizer launch, and quitting:
 
 ```text
 /help
@@ -29,6 +30,8 @@ ILYS-MT starts in a workspace command mode. This mode is intentionally limited t
 ```
 
 Creating or opening a project switches the terminal into project mode. Live monitoring, preset loading, status, and future region-editing commands are only available there.
+
+`/audiovisualizer` launches the separate `ilys-audiovisualizer` GUI executable from the same build directory as `ilys-mt`.
 
 Projects live under `projects/<name>` with starter `audio`, `midi`, `regions`, and `mixes` folders plus `project.json` metadata.
 
@@ -69,6 +72,17 @@ MIDI input -> internal instrument voices -> audio output
 The application does not listen to raw USB ports. USB audio interfaces are exposed by the operating system as audio devices, so ILYS-MT discovers them through the cross-platform audio backend.
 
 USB keyboards and synths may expose either audio, MIDI, or both. ILYS-MT now has a MIDI input layer for controllers and a starter internal voice engine for piano and synth presets.
+
+## Audiovisualizer Model
+
+The audiovisualizer is intentionally separate from the DAW shell. It opens a GLFW/ImGui window, captures the default mono audio input with miniaudio, and listens to the first available MIDI input through the existing MIDI layer.
+
+The first visualization mode is tuner-like:
+
+- pitch detection from audio input through autocorrelation
+- immediate note/frequency updates from MIDI note-on events
+- nearest-note and cents detune calculation
+- reactive animated string drawn in the GUI
 
 ## Real-Time Rules
 
